@@ -8,6 +8,7 @@ export interface Settings {
   gamepad: GamepadTuning;
   quality: QualityPreset | 'auto';
   camera: CameraMode;
+  trackId: string;
 }
 
 const KEY = 'bicio-f1.settings.v1';
@@ -19,6 +20,7 @@ export function defaultSettings(): Settings {
     gamepad: { ...DEFAULT_GAMEPAD },
     quality: 'auto',
     camera: 'chase',
+    trackId: 'riviera',
   };
 }
 
@@ -35,6 +37,7 @@ export function loadSettings(): Settings {
       gamepad: { ...d.gamepad, ...s.gamepad },
       quality: s.quality ?? d.quality,
       camera: s.camera ?? d.camera,
+      trackId: s.trackId ?? d.trackId,
     };
   } catch {
     return d;

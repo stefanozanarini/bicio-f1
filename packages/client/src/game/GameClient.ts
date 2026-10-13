@@ -1,4 +1,4 @@
-import { defaultCar2026, TEST_TRACK, Track, type TelemetrySample } from '@bicio/sim-core';
+import { defaultCar2026, RIVIERA, Track, TRACKS, type TelemetrySample } from '@bicio/sim-core';
 import { InputManager } from '../input/InputManager.ts';
 import type { FromWorker, Snapshot, ToWorker } from '../protocol.ts';
 import { detectQuality, Renderer, type CameraMode, type QualityPreset } from '../render/Renderer.ts';
@@ -32,7 +32,7 @@ export class GameClient {
   readonly telemetry: TelemetrySample[] = [];
   private readonly worker: Worker;
   private readonly input = new InputManager();
-  private readonly track = new Track(TEST_TRACK);
+  private readonly track: Track;
   private renderer: Renderer;
   private settings: Settings;
   private prev: Snapshot | null = null;
@@ -55,6 +55,7 @@ export class GameClient {
     private readonly cb: GameCallbacks,
   ) {
     this.settings = settings;
+    this.track = new Track(TRACKS[settings.trackId] ?? RIVIERA);
     this.renderer = this.makeRenderer(settings.quality === 'auto' ? detectQuality() : settings.quality);
     this.renderer.cameraMode = settings.camera;
     this.input.gamepad = settings.gamepad;
@@ -67,7 +68,7 @@ export class GameClient {
 
     this.worker = new Worker(new URL('../sim.worker.ts', import.meta.url), { type: 'module' });
     this.worker.onmessage = (ev: MessageEvent<FromWorker>) => this.onWorker(ev.data);
-    this.send({ type: 'start', trackId: TEST_TRACK.id, aids: settings.aids, keyboard: settings.keyboard });
+    this.send({ type: 'start', trackId: this.track.def.id, aids: settings.aids, keyboard: settings.keyboard });
 
     document.addEventListener('visibilitychange', this.onVisibility);
 

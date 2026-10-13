@@ -1,4 +1,4 @@
-import { TEST_TRACK } from '@bicio/sim-core';
+import { TRACKS } from '@bicio/sim-core';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { GameClient, type PerfInfo } from './game/GameClient.ts';
 import type { Snapshot } from './protocol.ts';
@@ -87,7 +87,13 @@ export function App() {
           <div className="menu-start">
             <h2>Guida libera</h2>
             <p>
-              {TEST_TRACK.name}
+              <select className="track-select" value={settings.trackId} onChange={(e) => updateSettings({ ...settings, trackId: e.target.value })}>
+                {Object.values(TRACKS).map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {t.name}
+                  </option>
+                ))}
+              </select>
               <br />
               <small>Vettura 2026 · aero attiva · ERS 350 kW</small>
             </p>

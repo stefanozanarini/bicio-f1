@@ -1,5 +1,6 @@
 import { Surface, type Track, type TrackQuery } from '@bicio/sim-core';
 import * as THREE from 'three';
+import { buildScenery } from './scenery.ts';
 import { asphaltTexture, checkerTexture, grassTexture, kerbTexture, labelTexture, seeded } from './textures.ts';
 
 /**
@@ -140,6 +141,7 @@ export function buildTrackScene(track: Track, opts: TrackSceneOptions): THREE.Gr
   addBrakeBoards(group, track);
   addGrandstand(group, track);
   addTrees(group, track, opts.trees);
+  group.add(buildScenery(track));
   return group;
 }
 

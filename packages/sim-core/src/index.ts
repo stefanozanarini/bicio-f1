@@ -7,4 +7,4 @@ export * from './sim.ts';
 export * from './telemetry.ts';
 export * from './tire.ts';
 export * from './track.ts';
-export { TEST_TRACK } from './tracks/testTrack.ts';
+export { RIVIERA, TEST_TRACK, TRACKS } from './tracks/index.ts';

@@ -3,10 +3,9 @@
  * Worker della simulazione: fa girare sim-core a 500 Hz, indipendentemente dal
  * frame rate del rendering, e invia gli snapshot al thread principale.
  */
-import { DT, Simulation, TEST_TRACK, type TrackDef } from '@bicio/sim-core';
+import { DT, Simulation, TEST_TRACK, TRACKS } from '@bicio/sim-core';
 import type { FromWorker, Snapshot, ToWorker } from './protocol.ts';
 
-const TRACKS: Record<string, TrackDef> = { [TEST_TRACK.id]: TEST_TRACK };
 /** Passi massimi per tick: se il worker resta indietro si rallenta invece di "saltare". */
 const MAX_STEPS_PER_TICK = 40;
 const POST_INTERVAL_MS = 1000 / 120;

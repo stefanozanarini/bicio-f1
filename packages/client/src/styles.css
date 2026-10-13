@@ -572,3 +572,14 @@ kbd {
   color: var(--muted);
   font-size: 13px;
 }
+
+.track-select {
+  font: inherit;
+  color: var(--text);
+  background: #262a33;
+  border: 1px solid var(--panel-border);
+  border-radius: 8px;
+  padding: 8px 10px;
+  width: 100%;
+  margin-bottom: 6px;
+}

@@ -95,3 +95,39 @@ export function labelTexture(text: string, bg = '#ffffff', fg = '#111111'): THRE
   tex.wrapT = THREE.ClampToEdgeWrapping;
   return tex;
 }
+
+/** Texture rettangolare disegnata su canvas (insegne, cartelli, cartelloni). */
+export function panelTexture(w: number, h: number, draw: (ctx: CanvasRenderingContext2D, w: number, h: number) => void): THREE.CanvasTexture {
+  const c = document.createElement('canvas');
+  c.width = w;
+  c.height = h;
+  const ctx = c.getContext('2d')!;
+  draw(ctx, w, h);
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.anisotropy = 8;
+  return tex;
+}
+
+/** Scrive un testo centrato riducendo il corpo finché non entra nella larghezza. */
+export function fitText(ctx: CanvasRenderingContext2D, text: string, x: number, y: number, maxW: number, size: number, weight = 'bold', family = 'sans-serif') {
+  let s = size;
+  do {
+    ctx.font = `${weight} ${s}px ${family}`;
+    s -= 2;
+  } while (ctx.measureText(text).width > maxW && s > 8);
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(text, x, y);
+}
+
+export function stripesTexture(a: string, b: string, count = 8): THREE.CanvasTexture {
+  const tex = panelTexture(256, 64, (ctx, w, h) => {
+    for (let i = 0; i < count; i++) {
+      ctx.fillStyle = i % 2 ? b : a;
+      ctx.fillRect((i * w) / count, 0, w / count + 1, h);
+    }
+  });
+  tex.wrapS = THREE.RepeatWrapping;
+  return tex;
+}
