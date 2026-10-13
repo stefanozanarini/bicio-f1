@@ -14,7 +14,7 @@
     "dev": "npm run dev -w @bicio/client",
     "dev:server": "npm run dev -w @bicio/server",
     "build": "npm run build -w @bicio/client && npm run build -w @bicio/server",
-    "typecheck": "tsc -p packages/sim-core && tsc -p packages/client && tsc -p packages/server",
+    "typecheck": "tsc -p packages/sim-core && tsc -p packages/shared && tsc -p packages/client && tsc -p packages/server",
     "test": "vitest run",
     "test:watch": "vitest",
     "metrics": "tsx packages/sim-core/scripts/metrics.ts"

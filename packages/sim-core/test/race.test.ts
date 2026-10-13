@@ -74,3 +74,37 @@ describe('aiuti alla guida', () => {
     expect(me.car.wheels.every((w) => w.surface === Surface.Grass)).toBe(true);
   });
 });
+
+describe('auto remote (multiplayer)', () => {
+  it('stima la posizione tra un aggiornamento e l\'altro e la cronometra', () => {
+    const specs: EntrantSpec[] = [
+      { id: 'me', kind: 'human' },
+      { id: 'amico', kind: 'remote' },
+    ];
+    const race = new RaceSession(TRACKS['lido-di-savio'], specs, { laps: 2, seed: 3 });
+    race.advance(500 * 10);
+    expect(race.phase).toBe('racing');
+    const p = race.track.poseAt(-20);
+    const st = { x: p.x, y: p.y, heading: p.heading, u: 50, v: 0, r: 0, steer: 0, spin: [0, 0, 0, 0] as [number, number, number, number], aero: 0, harvesting: false };
+    race.setRemoteState(1, st, 0.1);
+    // Proiettata in avanti di 0.1 s a 50 m/s: 5 m
+    const c = race.entrants[1].car;
+    expect(Math.hypot(c.x - p.x, c.y - p.y)).toBeCloseTo(5, 0);
+    // Tra un aggiornamento e l'altro continua a muoversi e taglia il traguardo
+    race.advance(500);
+    expect(race.entrants[1].timing.state.lap).toBe(1);
+  });
+
+  it('un giocatore ritirato esce dai contatti e finisce in fondo alla classifica', () => {
+    const specs: EntrantSpec[] = [
+      { id: 'me', kind: 'human' },
+      { id: 'amico', kind: 'remote' },
+      { id: 'ai', kind: 'ai', skill: randomSkill(lcg(1), 'medio') },
+    ];
+    const race = new RaceSession(TRACKS['lido-di-savio'], specs, { laps: 1, seed: 3 });
+    race.retire(1);
+    race.advance(500 * 30);
+    expect(race.entrants[1].retired).toBe(true);
+    expect(race.entrants[1].position).toBe(3);
+  });
+});

@@ -5,6 +5,7 @@
  * Gestisce sia le prove libere sia le gare contro i piloti automatici.
  */
 import { DEFAULT_TRACK_ID, DT, lcg, RaceSession, randomSkill, TRACKS, type EntrantSpec } from '@bicio/sim-core';
+import { packState, unpackState } from '@bicio/shared';
 import type { CarPose, FromWorker, SessionConfig, Snapshot, ToWorker } from './protocol.ts';
 
 /** Passi massimi per tick: se il worker resta indietro si rallenta invece di "saltare". */
@@ -26,6 +27,12 @@ const post = (msg: FromWorker) => postMessage(msg);
 
 function createSession(c: SessionConfig): RaceSession {
   const def = TRACKS[c.trackId] ?? TRACKS[DEFAULT_TRACK_ID];
+  if (c.mode === 'online') {
+    // La propria auto si guida qui, tutte le altre (giocatori e piloti automatici) arrivano dal server
+    const n = c.entrantCount ?? 1;
+    const specs: EntrantSpec[] = Array.from({ length: n }, (_, i) => (i === c.playerSlot ? { id: 'player', kind: 'human' } : { id: `net${i}`, kind: 'remote' }));
+    return new RaceSession(def, specs, { laps: c.laps, seed: c.seed, aids: c.aids, keyboard: c.keyboard });
+  }
   const race = c.mode === 'race';
   const n = race ? c.opponents + 1 : 1;
   const slot = race ? Math.min(c.playerSlot, n - 1) : 0;
@@ -67,6 +74,18 @@ self.onmessage = (ev: MessageEvent<ToWorker>) => {
       break;
     case 'reset':
       session?.respawn(session.focus);
+      break;
+    case 'remote':
+      if (session) {
+        msg.cars.forEach((a, i) => {
+          if (i === session!.focus) return;
+          if (a === null) session!.retire(i);
+          else {
+            const st = unpackState(a);
+            if (st) session!.setRemoteState(i, st, msg.lead);
+          }
+        });
+      }
       break;
     case 'restart':
       if (config) {
@@ -124,6 +143,7 @@ function snapshot(s: RaceSession): Snapshot {
     })),
     lap: { ...me.timing.state, splits: me.timing.state.splits.slice(), bestSplits: me.timing.state.bestSplits.slice() },
     cars,
+    own: config?.mode === 'online' ? packState(s.carState(s.focus)) : null,
     race: {
       phase: s.phase,
       lights: s.lights,

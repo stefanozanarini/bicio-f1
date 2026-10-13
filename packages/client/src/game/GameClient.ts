@@ -1,9 +1,11 @@
-import { defaultCar2026, Track, TRACKS, type TelemetrySample } from '@bicio/sim-core';
+import { defaultCar2026, emptyInput, Track, TRACKS, type TelemetrySample } from '@bicio/sim-core';
 import { InputManager } from '../input/InputManager.ts';
 import type { FromWorker, Snapshot, ToWorker } from '../protocol.ts';
 import { detectQuality, Renderer, type CameraMode, type QualityPreset } from '../render/Renderer.ts';
 import { touchActive, type Settings } from '../settings.ts';
 import type { SessionSetup } from './session.ts';
+import { CLIENT_STATE_HZ, type ServerMessage } from '@bicio/shared';
+import type { NetClient } from '../net/NetClient.ts';
 
 export interface GameCallbacks {
   onHud(snap: Snapshot): void;
@@ -37,7 +39,8 @@ export class GameClient {
   private renderer: Renderer;
   private settings: Settings;
   private prev: Snapshot | null = null;
-  private curr: Snapshot | null = null;
+  /** Ultimo snapshot ricevuto dal worker */
+  curr: Snapshot | null = null;
   private prevRecv = 0;
   private currRecv = 0;
   private raf = 0;
@@ -49,12 +52,17 @@ export class GameClient {
   private lowFpsSeconds = 0;
   private physicsHz = 0;
   private physicsLoad = 0;
+  private lastStateSent = 0;
+  /** Online: ultima classifica ufficiale ricevuta dal server */
+  private serverRace: Snapshot['race'] | null = null;
 
   constructor(
     private readonly container: HTMLElement,
     settings: Settings,
     readonly setup: SessionSetup,
     private readonly cb: GameCallbacks,
+    /** Online: collegamento con il server (gara in balotta) */
+    private readonly net: NetClient | null = null,
   ) {
     this.settings = settings;
     this.track = new Track(TRACKS[setup.config.trackId]);
@@ -102,6 +110,15 @@ export class GameClient {
       this.prev = this.curr;
       this.prevRecv = this.currRecv;
       if (this.curr && msg.snap.recoveries > this.curr.recoveries) this.cb.onNotice('Rimesso in pista');
+      if (this.net && msg.snap.own) {
+        const now = performance.now();
+        if (now - this.lastStateSent >= 1000 / CLIENT_STATE_HZ) {
+          this.lastStateSent = now;
+          this.net.send({ t: 'state', s: msg.snap.own });
+        }
+      }
+      // Online: giri, classifica e arrivo ufficiali sono quelli del server
+      if (this.serverRace) msg.snap.race = this.serverRace;
       this.curr = msg.snap;
       this.currRecv = performance.now();
       if (msg.telemetry.length) {
@@ -157,8 +174,29 @@ export class GameClient {
     }
   }
 
+  /** Online: stato di tutte le auto e classifica dal server. */
+  handleServerSnap(msg: Extract<ServerMessage, { t: 'snap' }>): void {
+    if (!this.net) return;
+    // Le auto degli altri si proiettano in avanti di mezzo giro di rete
+    this.send({ type: 'remote', cars: msg.cars, lead: Math.min(this.net.rtt, 500) / 2000 });
+    const me = this.setup.playerIndex;
+    this.serverRace = {
+      phase: msg.race.phase,
+      lights: msg.race.lights,
+      laps: msg.race.laps,
+      raceTime: msg.race.raceTime,
+      focus: me,
+      standings: msg.race.standings,
+    };
+  }
+
   setPaused(p: boolean): void {
     this.paused = p;
+    // Online la gara non si ferma: in pausa l'auto resta solo senza comandi
+    if (this.net) {
+      if (p) this.send({ type: 'input', input: emptyInput() });
+      return;
+    }
     this.send({ type: 'pause', paused: p });
   }
 

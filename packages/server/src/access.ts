@@ -64,32 +64,55 @@ const LOGIN_PAGE = `<!doctype html>
 </body>
 </html>`;
 
-export function registerAccess(app: FastifyInstance): void {
-  const password = process.env.ACCESS_PASSWORD ?? '';
-  if (!password) {
-    app.log.warn('ACCESS_PASSWORD non impostata: accesso libero');
-    return;
-  }
-  const expected = token(password);
+export interface AccessOptions {
+  /**
+   * Link d'invito "in balotta": se valido vale come accesso (gli amici non devono
+   * conoscere la password) e l'host viene avvisato che qualcuno l'ha aperto.
+   */
+  onInvite?: (room: string, token: string) => boolean;
+}
 
-  app.post<{ Body: { password?: string } }>('/api/login', async (req, reply) => {
-    const given = typeof req.body?.password === 'string' ? req.body.password : '';
-    if (!safeEqual(token(given), expected)) {
-      // Rallenta i tentativi a raffica
-      await new Promise((r) => setTimeout(r, 800));
-      return reply.code(401).send({ ok: false });
-    }
-    const secure = req.protocol === 'https' ? '; Secure' : '';
-    reply.header('Set-Cookie', `${COOKIE}=${expected}; Path=/; Max-Age=${MAX_AGE}; HttpOnly; SameSite=Lax${secure}`);
-    return { ok: true };
-  });
+export function registerAccess(app: FastifyInstance, opts: AccessOptions = {}): void {
+  const password = process.env.ACCESS_PASSWORD ?? '';
+  if (!password) app.log.warn('ACCESS_PASSWORD non impostata: accesso libero');
+  const expected = password ? token(password) : '';
+
+  if (password) {
+    app.post<{ Body: { password?: string } }>('/api/login', async (req, reply) => {
+      const given = typeof req.body?.password === 'string' ? req.body.password : '';
+      if (!safeEqual(token(given), expected)) {
+        // Rallenta i tentativi a raffica
+        await new Promise((r) => setTimeout(r, 800));
+        return reply.code(401).send({ ok: false });
+      }
+      return setAccessCookie(req, reply, expected).send({ ok: true });
+    });
+  }
 
   app.addHook('onRequest', async (req: FastifyRequest, reply: FastifyReply) => {
-    const path = req.url.split('?')[0];
+    const [path, query] = req.url.split('?');
+    // Apertura di un link d'invito: solo la pagina, non le risorse né le API
+    let invited = false;
+    if (query && opts.onInvite && !path.startsWith('/api/') && !path.startsWith('/assets/')) {
+      const q = new URLSearchParams(query);
+      const room = q.get('balotta');
+      const k = q.get('k');
+      if (room && k) invited = opts.onInvite(room, k);
+    }
+    if (!password) return;
     if (path === '/api/login' || path === '/api/health') return;
     const c = readCookie(req, COOKIE);
     if (c && safeEqual(c, expected)) return;
+    if (invited) {
+      setAccessCookie(req, reply, expected);
+      return;
+    }
     if (path.startsWith('/api/')) return reply.code(401).send({ error: 'accesso richiesto' });
     return reply.code(401).type('text/html').header('Cache-Control', 'no-store').send(LOGIN_PAGE);
   });
+}
+
+function setAccessCookie(req: FastifyRequest, reply: FastifyReply, value: string): FastifyReply {
+  const secure = req.protocol === 'https' ? '; Secure' : '';
+  return reply.header('Set-Cookie', `${COOKIE}=${value}; Path=/; Max-Age=${MAX_AGE}; HttpOnly; SameSite=Lax${secure}`);
 }

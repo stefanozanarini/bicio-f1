@@ -5,6 +5,7 @@ COPY package.json package-lock.json ./
 COPY packages/sim-core/package.json packages/sim-core/
 COPY packages/client/package.json packages/client/
 COPY packages/server/package.json packages/server/
+COPY packages/shared/package.json packages/shared/
 RUN npm ci
 COPY tsconfig.base.json ./
 COPY packages packages

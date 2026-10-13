@@ -5,12 +5,15 @@
   "type": "module",
   "scripts": {
     "dev": "tsx watch src/index.ts",
-    "build": "esbuild src/index.ts --bundle --platform=node --target=node22 --format=esm --sourcemap --outfile=dist/index.js --external:fastify --external:@fastify/static",
+    "build": "esbuild src/index.ts --bundle --platform=node --target=node22 --format=esm --sourcemap --outfile=dist/index.js --external:fastify --external:@fastify/static --external:@fastify/websocket",
     "start": "node dist/index.js"
   },
   "dependencies": {
     "@fastify/static": "^7.0.4",
-    "fastify": "^4.28.1"
+    "@fastify/websocket": "^10.0.1",
+    "fastify": "^4.28.1",
+    "@bicio/sim-core": "0.1.0",
+    "@bicio/shared": "0.1.0"
   },
   "devDependencies": {
     "esbuild": "^0.24.0"

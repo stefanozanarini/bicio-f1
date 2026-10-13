@@ -48,7 +48,19 @@ export function Tower({ race, drivers }: { race: RaceInfo; drivers: Driver[] }) 
 }
 
 /** Risultati con podio e classifica completa. */
-export function Results({ race, drivers, onRematch, onMenu }: { race: RaceInfo; drivers: Driver[]; onRematch: () => void; onMenu: () => void }) {
+export function Results({
+  race,
+  drivers,
+  onRematch,
+  onMenu,
+  rematchLabel = 'Rivincita',
+}: {
+  race: RaceInfo;
+  drivers: Driver[];
+  onRematch: () => void;
+  onMenu: () => void;
+  rematchLabel?: string;
+}) {
   const me = race.standings.find((r) => r.index === race.focus);
   const podium = race.standings.slice(0, 3);
   const bestLap = race.standings.reduce<number | null>((b, r) => (r.best !== null && (b === null || r.best < b) ? r.best : b), null);
@@ -90,7 +102,7 @@ export function Results({ race, drivers, onRematch, onMenu }: { race: RaceInfo; 
         </table>
         <div className="pause-actions">
           <button className="primary" onClick={onRematch}>
-            Rivincita
+            {rematchLabel}
           </button>
           <button onClick={onMenu}>Menu</button>
         </div>

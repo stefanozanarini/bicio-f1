@@ -193,20 +193,28 @@ Tutti i comandi si possono riassegnare e vengono salvati nel profilo utente.
 - **Gare non guidate**: durante il campionato il giocatore può guidare o fare solo il team principal. Le gare non guidate sono calcolate con un **modello statistico**: passo gara stimato dai parametri reali di vettura, setup e pilota, degrado gomme, strategia, eventi casuali (errori, guasti, safety car, meteo). Il risultato è immediato, con un riassunto giro per giro.
 - Per coerenza, il modello statistico viene **tarato sulla fisica vera**: si simulano offline giri con il sim-core per ricavare i tempi di riferimento di ogni combinazione auto/pista.
 
-## 13. Multiplayer
+## 13. Multiplayer ("Gioca in balotta")
 
-- **Server autoritativo**: per ogni stanza il server esegue il sim-core a 500 Hz ed è l'unico a decidere lo stato vero della gara (posizioni, contatti, penalità, tempi).
-- **Client**:
-  - invia solo gli **input** del giocatore (circa 60 volte al secondo, con numero di tick);
-  - simula subito la propria auto (**client-side prediction**) e, quando arriva lo stato dal server, la corregge rigiocando gli input non ancora confermati (**reconciliation**);
-  - mostra le altre auto con un leggero ritardo e le interpola, così si muovono in modo fluido.
-- **Snapshot dal server**: 20–30 al secondo, compressi (solo i dati cambiati).
-- **Contatti tra auto**: sono decisi dal server. È il caso più delicato con la latenza: si parte con una compensazione semplice e si raffina con test reali.
-- **Partenza e prima curva**: opzione "ghosting" (auto senza collisioni) per le lobby pubbliche, disattivabile nelle gare classificate.
-- **Lobby**: creazione stanze, invito tramite link, scelta pista/meteo/lunghezza/aiuti consentiti, posti vuoti riempiti da IA.
-- **Fine gara**: risultati e replay salvati nel DB.
-- **Anti-cheat**: il client non decide nulla, quindi non può barare su velocità o tempi. Gli aiuti consentiti sono imposti dalla stanza.
-- **Capacità indicativa**: una stanza da 20 auto a 500 Hz richiede circa un core. Un VPS da 2 core regge poche stanze in contemporanea: si misura in fase 7 e, se serve, si passa a un VPS più grande o a più game server.
+**Decisione (ottobre 2026): ogni giocatore simula la propria auto nel browser, il server fa da arbitro.**
+Il progetto iniziale prevedeva un server autoritativo che simula tutte le auto. Con la VPS in Canada
+(~100 ms di andata e ritorno dall'Italia) la propria auto avrebbe risposto ai comandi in ritardo:
+si è scelto di simulare la propria auto in locale (risposta immediata, come in singolo) e di usare
+il server per tutto il resto. Barare sarebbe possibile, ma il gioco è privato e protetto da password.
+
+- **Server** (`packages/server/src/rooms.ts`): stanze con sala d'attesa; in gara fa girare i piloti
+  automatici con la stessa fisica, tiene giri, classifica, distacchi e arrivo ufficiali e invia a
+  tutti lo stato di tutte le auto 20 volte al secondo.
+- **Client**: simula la propria auto a 500 Hz e invia il suo stato 30 volte al secondo; le altre auto
+  sono "remote": arrivano dalla rete, vengono proiettate in avanti di metà del tempo di andata e
+  ritorno e tra un aggiornamento e l'altro proseguono a velocità costante (dead reckoning). I contatti
+  con le auto remote agiscono sulla propria auto.
+- **Partenza sincronizzata**: stesso seme per tutti, quindi stesso semaforo e stessa griglia
+  (nomi e livree dei piloti automatici identici su ogni schermo).
+- **Link d'invito** (`/?balotta=STANZA&k=TOKEN`, token firmato): vale come accesso senza password;
+  quando viene aperto l'organizzatore riceve un avviso (anche sonoro e come notifica di sistema).
+- L'organizzatore sceglie pista, giri, numero e livello dei piloti automatici e dà il via; chi entra a
+  gara iniziata aspetta in sala la gara successiva; chi esce durante la gara viene ritirato.
+- Protocollo condiviso tra client e server in `packages/shared` (messaggi JSON su WebSocket `/api/ws`).
 
 ## 14. Dati e DB (bozza)
 - `users`, `profiles` (comandi, aiuti, preferenze)
@@ -234,7 +242,7 @@ Tutti i comandi si possono riassegnare e vengono salvati nel profilo utente.
 | 4 | Backend + DB: account, profili, giri record validati, salvataggi | Classifiche online |
 | 5 | Manageriale: weekend completo, setup, campionato, scuderia, sviluppo, simulazione statistica delle gare non guidate | Modalità carriera |
 | 6 | Meteo dinamico, safety car, replay con telecamere TV, più piste | Esperienza completa |
-| 7 | Multiplayer online: lobby, netcode, gare classificate | Gare online |
+| 7 🟡 | Multiplayer online: sala d'attesa e link d'invito ✅, gara con piloti automatici ✅; da fare: rientro dopo disconnessione, gare classificate | Gare online |
 
 La fase 1 è la più importante: se la guida non convince lì, il resto non conta. Avrà un ciclo di taratura dedicato con te.
 

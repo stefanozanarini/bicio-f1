@@ -9,7 +9,7 @@ Il progetto completo è descritto in [docs/PROGETTO.md](docs/PROGETTO.md). Per m
 - **Fase 0** (impostazione del progetto) — completata
 - **Fase 1** (prototipo di guida) — completata: vettura 2026, fisica a 500 Hz, tastiera, gamepad e touch, 3D, telemetria
 - **Fase 3** (gara) — in gran parte completata: "Gioca da solo" contro piloti automatici con abilità diverse, partenza con semaforo, contatti tra auto, scia e aria sporca, modalità sorpasso 2026, classifica e podio
-- **Multiplayer "Gioca in balotta"** — prossimo passo
+- **Multiplayer "Gioca in balotta"** — prima versione: stanza con link d'invito (senza password), avvisi all'organizzatore, gara tra amici e piloti automatici
 
 Piste: Lido di Savio (predefinita), Autodromo della Riviera, Circuito di prova Bassa Pianura.
 
@@ -19,7 +19,8 @@ Piste: Lido di Savio (predefinita), Autodromo della Riviera, Circuito di prova B
 packages/
   sim-core/   motore di simulazione deterministico (fisica, gomme, power unit, pista, cronometraggio)
   client/     gioco nel browser: React + Three.js, simulazione in un Web Worker
-  server/     server Node (Fastify): serve il client e le API
+  server/     server Node (Fastify): serve il client, le API e il multiplayer (WebSocket)
+  shared/     protocollo multiplayer condiviso tra client e server
 deploy/proxy/ reverse proxy condiviso della VPS (nginx + Let's Encrypt)
 docs/         progetto e guide
 ```

@@ -983,3 +983,91 @@ button:disabled {
   font-size: 12px;
   margin: -2px 0 8px;
 }
+
+/* ---------- In balotta ---------- */
+.balotta-box {
+  padding: 18px;
+  max-width: 520px;
+  margin: 0 auto;
+}
+.balotta-box h2 {
+  font-size: 17px;
+  margin: 4px 0 10px;
+}
+.balotta-grid {
+  max-width: 1000px;
+  margin: 0 auto;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 16px;
+}
+.balotta-grid .balotta-box {
+  max-width: none;
+  margin: 0;
+}
+button.wide {
+  width: 100%;
+  margin-top: 10px;
+}
+.balotta-error {
+  color: var(--bad);
+  font-weight: 600;
+}
+.invite-link {
+  font-family: ui-monospace, monospace;
+  font-size: 13px;
+  background: #1b1f27;
+  border: 1px solid #3a404d;
+  border-radius: 8px;
+  padding: 10px;
+  word-break: break-all;
+  user-select: all;
+}
+.invite-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 8px;
+}
+.button-like {
+  display: inline-block;
+  font: inherit;
+  color: var(--text);
+  text-decoration: none;
+  background: #262a33;
+  border: 1px solid var(--panel-border);
+  border-radius: 8px;
+  padding: 10px 18px;
+}
+.button-like.whatsapp {
+  background: #1f8f4e;
+  border-color: #1f8f4e;
+}
+.players {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+.players li {
+  padding: 8px 10px;
+  border-radius: 8px;
+  margin-bottom: 4px;
+  background: rgba(255, 255, 255, 0.04);
+}
+.players li.me {
+  background: rgba(255, 122, 0, 0.18);
+}
+.players li small {
+  color: var(--muted);
+}
+.waiting {
+  color: var(--muted);
+  font-style: italic;
+}
+.balotta-btn {
+  background: #1d3a5f;
+}
+.notice.fixed {
+  position: fixed;
+  z-index: 50;
+}

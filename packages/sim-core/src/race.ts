@@ -23,7 +23,11 @@ export type RacePhase = 'grid' | 'countdown' | 'racing' | 'finished';
 
 export interface EntrantSpec {
   id: string;
-  kind: 'human' | 'ai';
+  /**
+   * human: guidato qui con i comandi locali; ai: pilota automatico;
+   * remote: guidato altrove (multiplayer), qui si aggiorna con lo stato ricevuto dalla rete
+   */
+  kind: 'human' | 'ai' | 'remote';
   skill?: AiSkill;
 }
 
@@ -61,6 +65,22 @@ export interface Entrant {
   recoverTimer: number;
   /** Quante volte è stato rimesso in pista automaticamente */
   recoveries: number;
+  /** Ritirato (giocatore disconnesso): fuori dalla pista e in fondo alla classifica */
+  retired: boolean;
+}
+
+/** Stato di un'auto guidata altrove, ricevuto dalla rete. */
+export interface RemoteCarState {
+  x: number;
+  y: number;
+  heading: number;
+  u: number;
+  v: number;
+  r: number;
+  steer: number;
+  spin: [number, number, number, number];
+  aero: number;
+  harvesting: boolean;
 }
 
 const AI_AIDS: Aids = {
@@ -139,6 +159,7 @@ export class RaceSession {
         assists: new DrivingAssists(ai ? null : this.line, car),
         recoverTimer: 0,
         recoveries: 0,
+        retired: false,
       });
     });
     const human = this.entrants.findIndex((e) => e.spec.kind === 'human');
@@ -210,6 +231,10 @@ export class RaceSession {
 
     // --- Comandi e dinamica
     for (const e of this.entrants) {
+      if (e.spec.kind === 'remote') {
+        if (racing && !e.retired) this.deadReckon(e.car, DT);
+        continue;
+      }
       let input = e.input;
       if (e.ai) {
         e.ai.cooldown = e.finished;
@@ -222,7 +247,7 @@ export class RaceSession {
         e.car.step(ctl, e.aids, this.track, DT);
       }
     }
-    if (racing && this.entrants.length > 1) resolveCollisions(this.entrants.map((e) => e.car));
+    if (racing && this.entrants.length > 1) resolveCollisions(this.entrants.filter((e) => !e.retired).map((e) => e.car));
     if (this.entrants.length > 1) this.updateWake();
 
     this.tick++;
@@ -230,6 +255,7 @@ export class RaceSession {
 
     // --- Cronometraggio, arrivi, distacchi
     for (const e of this.entrants) {
+      if (e.retired) continue;
       const crossed = e.timing.update(e.car, now, DT);
       if (crossed) e.ai?.newLap();
       if (crossed && this.isRace && !e.finished && racing && e.timing.state.lap > this.options.laps) {
@@ -239,9 +265,9 @@ export class RaceSession {
         if (this.finishOrder.length === 1) this.closeAt = now + 90;
       }
       if (racing && !e.finished) this.updateGap(e, now);
-      if (racing && !e.ai && e.aids.autoRecover) this.checkRecover(e);
+      if (racing && e.spec.kind === 'human' && e.aids.autoRecover) this.checkRecover(e);
     }
-    if (this.isRace && this.phase === 'racing' && (this.finishOrder.length === this.entrants.length || now >= this.closeAt)) {
+    if (this.isRace && this.phase === 'racing' && (this.finishOrder.length >= this.entrants.filter((e) => !e.retired).length || now >= this.closeAt)) {
       this.phase = 'finished';
     }
     this.updatePositions();
@@ -273,6 +299,66 @@ export class RaceSession {
     }
   }
 
+  /** Stima della posizione di un'auto remota tra un aggiornamento e l'altro (velocità costanti). */
+  private deadReckon(c: Car, dt: number): void {
+    const co = cos(c.heading);
+    const si = sin(c.heading);
+    c.x += (c.u * co - c.v * si) * dt;
+    c.y += (c.u * si + c.v * co) * dt;
+    c.heading = wrapAngle(c.heading + c.r * dt);
+    for (let w = 0; w < 4; w++) c.wheels[w].spin += (c.u / c.tireParams(w).radius) * dt;
+  }
+
+  /**
+   * Aggiorna un'auto remota con lo stato ricevuto, proiettato in avanti di `lead` secondi
+   * per compensare il ritardo della rete.
+   */
+  setRemoteState(i: number, st: RemoteCarState, lead = 0): void {
+    const e = this.entrants[i];
+    if (!e || e.spec.kind !== 'remote' || e.retired) return;
+    const c = e.car;
+    c.x = st.x;
+    c.y = st.y;
+    c.heading = st.heading;
+    c.u = st.u;
+    c.v = st.v;
+    c.r = st.r;
+    c.wheels[0].steer = st.steer;
+    c.wheels[1].steer = st.steer;
+    for (let w = 0; w < 4; w++) c.wheels[w].spin = st.spin[w];
+    c.aeroBlend = st.aero;
+    c.ersHarvestPower = st.harvesting ? 1 : 0;
+    if (lead > 0 && (this.phase === 'racing' || this.phase === 'finished')) {
+      const steps = Math.min(100, Math.round(lead / DT));
+      for (let k = 0; k < steps; k++) this.deadReckon(c, DT);
+    }
+  }
+
+  /** Stato dell'auto per l'invio in rete. */
+  carState(i: number): RemoteCarState {
+    const c = this.entrants[i].car;
+    return {
+      x: c.x,
+      y: c.y,
+      heading: c.heading,
+      u: c.u,
+      v: c.v,
+      r: c.r,
+      steer: c.wheels[0].steer,
+      spin: [c.wheels[0].spin, c.wheels[1].spin, c.wheels[2].spin, c.wheels[3].spin],
+      aero: c.aeroBlend,
+      harvesting: c.ersHarvestPower > 0,
+    };
+  }
+
+  /** Ritira un iscritto (giocatore disconnesso): esce dalla pista e dalla classifica attiva. */
+  retire(i: number): void {
+    const e = this.entrants[i];
+    if (!e || e.retired) return;
+    e.retired = true;
+    e.car.place(1e6 + i * 100, 1e6, 0);
+  }
+
   advance(n: number): void {
     for (let i = 0; i < n; i++) this.step();
   }
@@ -291,7 +377,7 @@ export class RaceSession {
       if (i >= 0) {
         const latE = (e.car.x - tr.px[i]) * -tr.ty[i] + (e.car.y - tr.py[i]) * tr.tx[i];
         for (const o of this.entrants) {
-          if (o === e) continue;
+          if (o === e || o.retired) continue;
           let ahead = o.timing.progress - e.timing.progress;
           ahead -= L * Math.round(ahead / L);
           if (ahead > 0 && ahead < nearestAhead && !o.finished) nearestAhead = ahead;
@@ -325,6 +411,7 @@ export class RaceSession {
   private updatePositions(): void {
     const L = this.track.length;
     const order = this.entrants.slice().sort((a, b) => {
+      if (a.retired !== b.retired) return a.retired ? 1 : -1;
       if (a.finished && b.finished) return this.finishOrder.indexOf(a.index) - this.finishOrder.indexOf(b.index);
       if (a.finished) return -1;
       if (b.finished) return 1;
@@ -345,7 +432,7 @@ export class RaceSession {
     const L = this.track.length;
     const me = self.timing.progress;
     for (const o of this.entrants) {
-      if (o === self) continue;
+      if (o === self || o.retired) continue;
       let ahead = o.timing.progress - me;
       // Su un giro di differenza conta la posizione fisica sulla pista
       ahead -= L * Math.round(ahead / L);

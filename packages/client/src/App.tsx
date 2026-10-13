@@ -1,7 +1,10 @@
 import { TRACKS } from '@bicio/sim-core';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { GameClient, type PerfInfo } from './game/GameClient.ts';
-import { buildSession, type SessionSetup } from './game/session.ts';
+import { buildOnlineSession, buildSession, type SessionSetup } from './game/session.ts';
+import type { LobbySettings, RoomView } from '@bicio/shared';
+import { askNotificationPermission, clearInviteFromUrl, ding, inviteFromUrl, NetClient, systemNotify } from './net/NetClient.ts';
+import { Balotta } from './ui/Balotta.tsx';
 import type { Snapshot } from './protocol.ts';
 import { CAMERA_LABELS, QUALITY_LABELS } from './render/Renderer.ts';
 import { TiltSteering } from './input/tilt.ts';
@@ -28,10 +31,14 @@ async function enterFullscreen(): Promise<void> {
   }
 }
 
-type Screen = 'menu' | 'drive' | 'drivers' | 'garage';
+type Screen = 'menu' | 'drive' | 'drivers' | 'garage' | 'balotta';
+
+// Link d'invito letto una volta all'apertura della pagina
+const INVITE = inviteFromUrl();
+if (INVITE) clearInviteFromUrl();
 
 export function App() {
-  const [screen, setScreen] = useState<Screen>('menu');
+  const [screen, setScreen] = useState<Screen>(INVITE ? 'balotta' : 'menu');
   const [settings, setSettings] = useState<Settings>(loadSettings);
   const [paused, setPaused] = useState(false);
   const [snap, setSnap] = useState<Snapshot | null>(null);
@@ -41,6 +48,14 @@ export function App() {
   const [gamepadName, setGamepadName] = useState<string | null>(null);
   const [setup, setSetup] = useState<SessionSetup | null>(null);
   const [resultsDismissed, setResultsDismissed] = useState(false);
+  // Multiplayer
+  const [room, setRoom] = useState<RoomView | null>(null);
+  const [netError, setNetError] = useState<string | null>(null);
+  const [connecting, setConnecting] = useState(false);
+  const [invite, setInvite] = useState(INVITE);
+  const net = useRef<NetClient | null>(null);
+  const screenRef = useRef(screen);
+  screenRef.current = screen;
   const container = useRef<HTMLDivElement>(null);
   const game = useRef<GameClient | null>(null);
 
@@ -68,6 +83,7 @@ export function App() {
     if (screen !== 'drive' || !container.current || !setup) return;
     setSnap(null);
     setResultsDismissed(false);
+    const online = setup.config.mode === 'online' ? net.current : null;
     const g = new GameClient(container.current, settings, setup, {
       onHud: setSnap,
       onPauseRequest: () => setPaused((p) => !p),
@@ -79,8 +95,10 @@ export function App() {
       onToggleTelemetry: () => setShowTelemetry((t) => !t),
       onPerf: setPerf,
       onNotice: flash,
-    });
+    }, online);
     game.current = g;
+    // Solo in sviluppo: accesso dalla console per il debug
+    if (import.meta.env.DEV) (window as unknown as { __bicio?: unknown }).__bicio = g;
     return () => {
       g.dispose();
       game.current = null;
@@ -93,11 +111,83 @@ export function App() {
     game.current?.setPaused(paused);
   }, [paused]);
 
+  /** Collegamento al server: crea una stanza o entra con il link d'invito. */
+  const connectNet = () => {
+    net.current?.close();
+    setNetError(null);
+    setConnecting(true);
+    askNotificationPermission();
+    const name = settings.playerName.trim() || 'Pilota';
+    const c = new NetClient({
+      onRoom: (r) => {
+        setConnecting(false);
+        setRoom(r);
+        setInvite(null);
+        // Il padrone di casa è tornato in sala: anche gli altri escono dalla gara
+        if (r.phase === 'lobby' && screenRef.current === 'drive') setScreen('balotta');
+      },
+      onNotice: (kind, text) => {
+        flash(text);
+        if (kind === 'invite' || kind === 'join') {
+          ding();
+          systemNotify(text);
+        }
+      },
+      onStart: (race) => {
+        setSetup(buildOnlineSession(loadSettings(), race));
+        setPaused(false);
+        setScreen('drive');
+      },
+      onSnap: (msg) => game.current?.handleServerSnap(msg),
+      onError: (text) => {
+        setNetError(text);
+        setConnecting(false);
+        setRoom(null);
+      },
+      onClose: () => {
+        setNetError('Connessione con il server persa');
+        setConnecting(false);
+        setRoom(null);
+        if (screenRef.current === 'drive') setScreen('balotta');
+      },
+    });
+    net.current = c;
+    c.connect(invite ? { t: 'join', room: invite.room, token: invite.token, name } : { t: 'create', name });
+  };
+  const leaveNet = () => {
+    net.current?.close();
+    net.current = null;
+    setRoom(null);
+    setInvite(null);
+    setNetError(null);
+    setScreen('menu');
+  };
+  const isOnline = setup?.config.mode === 'online';
+  const isHost = !!room && room.you === room.hostId;
+
   const touch = touchActive(settings);
   const telemetrySource = useCallback(() => game.current?.telemetry ?? [], []);
 
   if (screen === 'drivers') return <DriversGallery onBack={() => setScreen('menu')} />;
   if (screen === 'garage') return <Garage onBack={() => setScreen('menu')} />;
+  if (screen === 'balotta')
+    return (
+      <>
+        <Balotta
+          room={room}
+          joining={!!invite}
+          connecting={connecting}
+          error={netError}
+          name={settings.playerName}
+          onName={(n) => updateSettings({ ...settings, playerName: n })}
+          onConnect={connectNet}
+          onSettings={(s: LobbySettings) => net.current?.send({ t: 'settings', settings: s })}
+          onStart={() => net.current?.send({ t: 'start' })}
+          onLeave={leaveNet}
+        />
+        {notice && <div className="notice fixed">{notice}</div>}
+      </>
+    );
 
   /** Entra in pista: prepara la sessione dentro il gesto dell'utente (schermo intero, sensori). */
   const start = async (mode: 'practice' | 'race') => {
@@ -200,8 +290,8 @@ export function App() {
             </button>
 
             <h2>Gioca in balotta</h2>
-            <button className="secondary-wide" disabled title="In arrivo: multiplayer con link d'invito">
-              👥 In arrivo: gara con gli amici
+            <button className="secondary-wide balotta-btn" onClick={() => setScreen('balotta')}>
+              👥 Crea una gara con gli amici
             </button>
 
             <h2>Altro</h2>
@@ -255,8 +345,13 @@ export function App() {
         <Results
           race={snap.race}
           drivers={setup.drivers}
-          onRematch={() => setSetup(buildSession(loadSettings(), 'race'))}
-          onMenu={() => setScreen('menu')}
+          rematchLabel={isOnline ? (isHost ? 'Torna in sala' : 'Aspetta in sala') : 'Rivincita'}
+          onRematch={() => {
+            if (!isOnline) setSetup(buildSession(loadSettings(), 'race'));
+            else if (isHost) net.current?.send({ t: 'lobby' });
+            else setScreen('balotta');
+          }}
+          onMenu={() => (isOnline ? leaveNet() : setScreen('menu'))}
         />
       )}
       {paused && (
@@ -267,16 +362,19 @@ export function App() {
               <button className="primary" onClick={() => setPaused(false)}>
                 Riprendi
               </button>
-              <button
-                onClick={() => {
-                  game.current?.restart();
-                  setResultsDismissed(false);
-                  setPaused(false);
-                }}
-              >
-                {setup?.config.mode === 'race' ? 'Ricomincia la gara' : 'Ricomincia la sessione'}
-              </button>
-              <button onClick={() => setScreen('menu')}>Torna al menu</button>
+              {!isOnline && (
+                <button
+                  onClick={() => {
+                    game.current?.restart();
+                    setResultsDismissed(false);
+                    setPaused(false);
+                  }}
+                >
+                  {setup?.config.mode === 'race' ? 'Ricomincia la gara' : 'Ricomincia la sessione'}
+                </button>
+              )}
+              <button onClick={() => (isOnline ? leaveNet() : setScreen('menu'))}>{isOnline ? 'Esci dalla gara' : 'Torna al menu'}</button>
+              {isOnline && <p className="hint">In balotta la gara non si ferma: in pausa la tua auto resta senza comandi.</p>}
             </div>
             <SettingsPanel settings={settings} onChange={updateSettings} gamepadName={gamepadName} />
           </div>

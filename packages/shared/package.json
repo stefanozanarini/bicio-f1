@@ -1,0 +1,13 @@
+{
+  "name": "@bicio/shared",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Tipi e funzioni condivisi tra client e server di bicio-F1 (protocollo multiplayer)",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@bicio/sim-core": "0.1.0"
+  }
+}

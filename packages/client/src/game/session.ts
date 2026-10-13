@@ -1,3 +1,4 @@
+import type { RaceStart } from '@bicio/shared';
 import { DEFAULT_TRACK_ID, TRACKS } from '@bicio/sim-core';
 import { generateGrid, type Driver } from '../drivers/index.ts';
 import type { SessionConfig } from '../protocol.ts';
@@ -52,5 +53,37 @@ export function buildSession(settings: Settings, mode: 'practice' | 'race', seed
     drivers,
     liveries: drivers.map(liveryOf),
     playerIndex: slot,
+  };
+}
+
+/**
+ * Sessione "in balotta" a partire dalla partenza decisa dal server: stessa griglia e
+ * stesso seme per tutti, quindi stessi nomi e livree dei piloti automatici su ogni schermo.
+ */
+export function buildOnlineSession(settings: Settings, race: RaceStart): SessionSetup {
+  const n = race.entrants.length;
+  const drivers = generateGrid(race.seed, n);
+  race.entrants.forEach((e, i) => {
+    if (e.kind === 'player') {
+      const name = e.name ?? 'Pilota';
+      drivers[i].name = { full: name, code: name.replace(/[^\p{L}]/gu, '').slice(0, 3).toUpperCase() || 'GIO' };
+    }
+  });
+  return {
+    config: {
+      mode: 'online',
+      trackId: TRACKS[race.trackId] ? race.trackId : DEFAULT_TRACK_ID,
+      laps: race.laps,
+      opponents: n - 1,
+      difficulty: race.difficulty,
+      playerSlot: race.you,
+      seed: race.seed,
+      aids: settings.aids,
+      keyboard: settings.keyboard,
+      entrantCount: n,
+    },
+    drivers,
+    liveries: drivers.map(liveryOf),
+    playerIndex: race.you,
   };
 }

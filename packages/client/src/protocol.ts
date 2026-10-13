@@ -2,7 +2,8 @@ import type { Aids, Difficulty, KeyboardTuning, LapState, RacePhase, RawInput, T
 
 /** Configurazione di una sessione in pista. */
 export interface SessionConfig {
-  mode: 'practice' | 'race';
+  /** online = gara in balotta: le altre auto arrivano dalla rete */
+  mode: 'practice' | 'race' | 'online';
   trackId: string;
   /** Giri di gara (ignorato nelle prove libere) */
   laps: number;
@@ -13,6 +14,8 @@ export interface SessionConfig {
   seed: number;
   aids: Aids;
   keyboard: KeyboardTuning;
+  /** Solo online: numero totale di auto in griglia */
+  entrantCount?: number;
 }
 
 /** Messaggi dal thread principale al worker della simulazione. */
@@ -22,7 +25,9 @@ export type ToWorker =
   | { type: 'settings'; aids: Aids; keyboard: KeyboardTuning }
   | { type: 'pause'; paused: boolean }
   | { type: 'reset' }
-  | { type: 'restart' };
+  | { type: 'restart' }
+  /** Online: stato delle auto ricevuto dal server, proiettato in avanti di `lead` secondi */
+  | { type: 'remote'; cars: (number[] | null)[]; lead: number };
 
 export interface WheelSnapshot {
   steer: number;
@@ -56,6 +61,7 @@ export interface StandingRow {
   finished: boolean;
   finishTime: number | null;
   best: number | null;
+  retired?: boolean;
 }
 
 export interface RaceInfo {
@@ -97,6 +103,8 @@ export interface Snapshot {
   lap: LapState;
   cars: CarPose[];
   race: RaceInfo;
+  /** Online: stato compatto della propria auto, da inviare al server */
+  own: number[] | null;
 }
 
 export type FromWorker =

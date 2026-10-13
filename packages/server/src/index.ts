@@ -2,12 +2,15 @@ import fastifyStatic from '@fastify/static';
 import Fastify from 'fastify';
 import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { randomBytes } from 'node:crypto';
 import { registerAccess } from './access.ts';
+import { registerMultiplayer } from './multiplayer.ts';
+import { Rooms } from './rooms.ts';
 
 /**
  * Server di bicio-F1.
- * Fase 0: serve il client compilato e un endpoint di stato.
- * Fasi successive: account e salvataggi (PostgreSQL), game server multiplayer (WebSocket).
+ * Serve il client compilato, l'endpoint di stato e il multiplayer "in balotta" (WebSocket).
+ * Fasi successive: account e salvataggi (PostgreSQL).
  */
 const PORT = Number(process.env.PORT ?? 3000);
 const HOST = process.env.HOST ?? '0.0.0.0';
@@ -16,9 +19,11 @@ const VERSION = process.env.APP_VERSION ?? 'dev';
 
 const app = Fastify({ logger: { level: process.env.LOG_LEVEL ?? 'info' }, trustProxy: true });
 
-registerAccess(app);
+const rooms = new Rooms(process.env.SESSION_SECRET ?? randomBytes(16).toString('hex'));
+registerAccess(app, { onInvite: (room, token) => rooms.validateInvite(room, token, true) !== null });
+await registerMultiplayer(app, rooms);
 
-app.get('/api/health', async () => ({ ok: true, version: VERSION, uptime: Math.round(process.uptime()) }));
+app.get('/api/health', async () => ({ ok: true, version: VERSION, uptime: Math.round(process.uptime()), rooms: rooms.count }));
 
 if (existsSync(PUBLIC_DIR)) {
   await app.register(fastifyStatic, {
