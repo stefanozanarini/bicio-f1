@@ -976,3 +976,10 @@ button:disabled {
     transform: translateX(-50%) scale(0.7);
   }
 }
+
+.level-hint {
+  display: block;
+  color: var(--muted);
+  font-size: 12px;
+  margin: -2px 0 8px;
+}

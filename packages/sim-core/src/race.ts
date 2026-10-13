@@ -1,4 +1,5 @@
 import { AiDriver, lcg, type AiSkill } from './ai.ts';
+import { DrivingAssists } from './assists.ts';
 import { Car, FL, FR, RL, RR } from './car.ts';
 import { resolveCollisions } from './collisions.ts';
 import {
@@ -10,7 +11,7 @@ import {
   type KeyboardTuning,
   type RawInput,
 } from './controls.ts';
-import { atan, cos, sin } from './dmath.ts';
+import { abs, atan, atan2, cos, sin, wrapAngle } from './dmath.ts';
 import { LapTracker } from './laps.ts';
 import { defaultCar2026, type CarParams } from './params.ts';
 import { RacingLine } from './racingLine.ts';
@@ -55,9 +56,28 @@ export interface Entrant {
   gap: number;
   lapsBehind: number;
   lastMark: number;
+  readonly assists: DrivingAssists;
+  /** Tempo trascorso fuori pista, girato o fermo fuori dalla carreggiata [s] */
+  recoverTimer: number;
+  /** Quante volte è stato rimesso in pista automaticamente */
+  recoveries: number;
 }
 
-const AI_AIDS: Aids = { abs: true, tractionControl: true, autoShift: true, steerLimit: 0 };
+const AI_AIDS: Aids = {
+  abs: true,
+  tractionControl: true,
+  autoShift: true,
+  steerLimit: 0,
+  stability: 0,
+  brakingAssist: 0,
+  forgivingGrass: false,
+  autoRecover: false,
+  steerAssist: 0,
+};
+/** Rientro automatico: secondi fuori pista, girati o fermi sull'erba prima di intervenire */
+const RECOVER_AFTER = 2.5;
+/** Velocità con cui si riparte dopo il rientro [m/s] */
+const RECOVER_SPEED = 16;
 /** Distanza tra i punti in cui si misurano i distacchi [m] */
 const GAP_MARK = 25;
 const TELEMETRY_EVERY = PHYSICS_HZ / TELEMETRY_HZ;
@@ -93,8 +113,8 @@ export class RaceSession {
   constructor(def: TrackDef, specs: EntrantSpec[], options: RaceOptions) {
     this.track = new Track(def);
     this.options = options;
-    const hasAi = specs.some((s) => s.kind === 'ai');
-    this.line = hasAi ? new RacingLine(this.track) : null;
+    // Traiettoria ideale: serve ai piloti automatici e alla frenata assistita
+    this.line = new RacingLine(this.track);
     const rng = lcg(options.seed);
     this.lightsOutAt = 6 + 0.2 + rng() * 2.6;
     specs.forEach((spec, index) => {
@@ -116,6 +136,9 @@ export class RaceSession {
         gap: 0,
         lapsBehind: 0,
         lastMark: -Infinity,
+        assists: new DrivingAssists(ai ? null : this.line, car),
+        recoverTimer: 0,
+        recoveries: 0,
       });
     });
     const human = this.entrants.findIndex((e) => e.spec.kind === 'human');
@@ -150,8 +173,8 @@ export class RaceSession {
     e.ai?.clearStuck();
   }
 
-  /** Riporta in pista un iscritto (tasto R o pilota automatico bloccato): giro invalidato. */
-  respawn(i: number): void {
+  /** Riporta in pista un iscritto (tasto R, rientro automatico o pilota bloccato): giro invalidato. */
+  respawn(i: number, speed = 0): void {
     const e = this.entrants[i];
     this.track.query(e.car.x, e.car.y, e.timing.trackIndex, this.q);
     // Primo punto libero sulla linea centrale, arretrando di 12 m alla volta
@@ -163,6 +186,12 @@ export class RaceSession {
       s -= 12;
     }
     this.placeAt(e, s, 0);
+    e.assists.reset();
+    e.recoverTimer = 0;
+    if (speed > 0) {
+      e.car.u = speed;
+      for (let w = 0; w < 4; w++) e.car.wheels[w].omega = speed / e.car.tireParams(w).radius;
+    }
   }
 
   step(): void {
@@ -188,6 +217,7 @@ export class RaceSession {
         if (e.ai.stuck) this.respawn(e.index);
       }
       const ctl = e.filter.update(input, e.keyboard, e.aids, e.car.params, e.car.speed, DT);
+      if (!e.ai) e.assists.apply(ctl, e.car, e.aids);
       if (racing) {
         e.car.step(ctl, e.aids, this.track, DT);
       }
@@ -209,12 +239,38 @@ export class RaceSession {
         if (this.finishOrder.length === 1) this.closeAt = now + 90;
       }
       if (racing && !e.finished) this.updateGap(e, now);
+      if (racing && !e.ai && e.aids.autoRecover) this.checkRecover(e);
     }
     if (this.isRace && this.phase === 'racing' && (this.finishOrder.length === this.entrants.length || now >= this.closeAt)) {
       this.phase = 'finished';
     }
     this.updatePositions();
     if (this.tick % TELEMETRY_EVERY === 0) this.recordTelemetry();
+  }
+
+  /**
+   * Rientro automatico del giocatore: dopo qualche secondo con tutte le ruote sull'erba,
+   * contromano o fermo fuori dalla carreggiata, l'auto torna in pista in un punto libero.
+   */
+  private checkRecover(e: Entrant): void {
+    const c = e.car;
+    const w = c.wheels;
+    const onGrass = w.every((x) => x.surface === Surface.Grass);
+    const anyOff = w.some((x) => x.offTrack);
+    const i = e.timing.trackIndex;
+    let wrongWay = false;
+    if (i >= 0) {
+      const err = wrapAngle(c.heading - atan2(this.track.ty[i], this.track.tx[i]));
+      wrongWay = abs(err) > 1.75 && c.speed < 25;
+    }
+    const stopped = c.speed < 3 && anyOff;
+    if (onGrass || wrongWay || stopped) e.recoverTimer += DT;
+    else e.recoverTimer = Math.max(0, e.recoverTimer - 2 * DT);
+    // Con la guida assistita si rientra prima
+    if (e.recoverTimer > (e.aids.steerAssist > 0 ? RECOVER_AFTER * 0.6 : RECOVER_AFTER)) {
+      e.recoveries++;
+      this.respawn(e.index, RECOVER_SPEED);
+    }
   }
 
   advance(n: number): void {

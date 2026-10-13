@@ -101,6 +101,7 @@ export class GameClient {
     if (msg.type === 'snapshot') {
       this.prev = this.curr;
       this.prevRecv = this.currRecv;
+      if (this.curr && msg.snap.recoveries > this.curr.recoveries) this.cb.onNotice('Rimesso in pista');
       this.curr = msg.snap;
       this.currRecv = performance.now();
       if (msg.telemetry.length) {

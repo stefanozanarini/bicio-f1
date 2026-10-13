@@ -113,6 +113,7 @@ function snapshot(s: RaceSession): Snapshot {
     aeroBlend: c.aeroBlend,
     tcActive: c.tcFactor < 0.98,
     overtakeMode: c.overtakeMode,
+    recoveries: me.recoveries,
     wheels: c.wheels.map((w) => ({
       steer: w.steer,
       spin: w.spin,

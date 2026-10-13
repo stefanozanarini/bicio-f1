@@ -1,3 +1,4 @@
+import { aidsForLevel, type DrivingLevel } from '@bicio/sim-core';
 import { isTouchDevice, type Settings } from '../settings.ts';
 import { TiltSteering } from '../input/tilt.ts';
 import { ACTION_LABELS, DEFAULT_BINDINGS, type Action } from '../input/InputManager.ts';
@@ -48,7 +49,8 @@ function Toggle(props: { label: string; value: boolean; onChange: (v: boolean) =
 
 export function SettingsPanel({ settings, onChange, gamepadName }: Props) {
   const s = settings;
-  const aids = (patch: Partial<Settings['aids']>) => onChange({ ...s, aids: { ...s.aids, ...patch } });
+  // Toccare un singolo aiuto passa al livello personalizzato
+  const aids = (patch: Partial<Settings['aids']>) => onChange({ ...s, drivingLevel: 'personalizzato', aids: { ...s.aids, ...patch } });
   const kb = (patch: Partial<Settings['keyboard']>) => onChange({ ...s, keyboard: { ...s.keyboard, ...patch } });
   const gp = (patch: Partial<Settings['gamepad']>) => onChange({ ...s, gamepad: { ...s.gamepad, ...patch } });
   const pct = (v: number) => `${Math.round(v * 100)}%`;
@@ -57,6 +59,12 @@ export function SettingsPanel({ settings, onChange, gamepadName }: Props) {
     <div className="settings">
       <section>
         <h3>Aiuti alla guida</h3>
+        <DrivingLevelSelect settings={s} onChange={onChange} />
+        <Toggle label="Rientro automatico in pista" value={s.aids.autoRecover} onChange={(v) => aids({ autoRecover: v })} hint="Dopo un'uscita lunga, un testacoda o se resti fermo fuori pista" />
+        <Toggle label="Erba indulgente" value={s.aids.forgivingGrass} onChange={(v) => aids({ forgivingGrass: v })} hint="Fuori pista l'auto non si pianta e non si gira così facilmente" />
+        <Slider label="Controllo di stabilità" value={s.aids.stability} min={0} max={1} step={0.25} format={pct} onChange={(v) => aids({ stability: v })} />
+        <Slider label="Guida assistita" value={s.aids.steerAssist} min={0} max={1} step={0.25} format={pct} onChange={(v) => aids({ steerAssist: v })} />
+        <Slider label="Frenata assistita" value={s.aids.brakingAssist} min={0} max={1} step={0.25} format={pct} onChange={(v) => aids({ brakingAssist: v })} />
         <Toggle label="ABS" value={s.aids.abs} onChange={(v) => aids({ abs: v })} hint="Le F1 vere non hanno l'ABS" />
         <Toggle label="Controllo di trazione" value={s.aids.tractionControl} onChange={(v) => aids({ tractionControl: v })} hint="Vietato in F1 dal 2008" />
         <Toggle label="Cambio automatico" value={s.aids.autoShift} onChange={(v) => aids({ autoShift: v })} />
@@ -69,7 +77,7 @@ export function SettingsPanel({ settings, onChange, gamepadName }: Props) {
           format={pct}
           onChange={(v) => aids({ steerLimit: v })}
         />
-        <p className="hint">Per la massima fedeltà: tutto disattivato. Con la tastiera il limitatore di sterzo è consigliato.</p>
+        <p className="hint">La fisica è sempre la stessa: cambiano solo gli aiuti. "Simulazione" è la guida vera, senza aiuti.</p>
       </section>
 
       <section>
@@ -168,5 +176,45 @@ export function SettingsPanel({ settings, onChange, gamepadName }: Props) {
         </table>
       </section>
     </div>
+  );
+}
+
+export const LEVEL_LABELS: Record<Settings['drivingLevel'], string> = {
+  bicio: 'Bicio',
+  facile: 'Facile',
+  medio: 'Medio',
+  simulazione: 'Simulazione',
+  personalizzato: 'Personalizzato',
+};
+
+/** Scelta del livello di guida: imposta tutti gli aiuti in un colpo solo. */
+const LEVEL_HINTS: Record<Settings['drivingLevel'], string> = {
+  bicio: 'Il più semplice: lo sterzo segue da solo la traiettoria, basta dare gas',
+  facile: 'Frenata assistita, controllo di stabilità, erba indulgente, rientro in pista',
+  medio: 'Stabilità parziale, ABS, controllo di trazione, cambio automatico',
+  simulazione: 'Nessun aiuto: la guida vera di una F1',
+  personalizzato: 'Aiuti scelti uno per uno',
+};
+
+/** Scelta del livello di guida: imposta tutti gli aiuti in un colpo solo. */
+export function DrivingLevelSelect({ settings, onChange }: { settings: Settings; onChange: (s: Settings) => void }) {
+  return (
+    <>
+      <select
+        className="track-select"
+        value={settings.drivingLevel}
+        onChange={(e) => {
+          const level = e.target.value as Settings['drivingLevel'];
+          onChange({ ...settings, drivingLevel: level, aids: level === 'personalizzato' ? settings.aids : aidsForLevel(level as DrivingLevel) });
+        }}
+      >
+        {(Object.keys(LEVEL_LABELS) as Settings['drivingLevel'][]).map((l) => (
+          <option key={l} value={l}>
+            {LEVEL_LABELS[l]}
+          </option>
+        ))}
+      </select>
+      <small className="level-hint">{LEVEL_HINTS[settings.drivingLevel]}</small>
+    </>
   );
 }

@@ -47,10 +47,46 @@ export interface Aids {
    * un tasto premuto chiederebbe l'angolo massimo e l'auto andrebbe in testacoda.
    */
   steerLimit: number;
+  /** Controllo di stabilità (0..1): controsterzo automatico e taglio del gas se l'auto si gira */
+  stability: number;
+  /** Frenata assistita (0..1): frena prima delle curve se si arriva troppo forte */
+  brakingAssist: number;
+  /** Erba indulgente: fuori pista più aderenza e meno resistenza */
+  forgivingGrass: boolean;
+  /** Rientro automatico in pista dopo un'uscita lunga, un testacoda o un'auto ferma */
+  autoRecover: boolean;
+  /** Guida assistita (0..1): lo sterzo segue da solo la traiettoria ideale */
+  steerAssist: number;
 }
 
 export function defaultAids(): Aids {
-  return { abs: false, tractionControl: true, autoShift: false, steerLimit: 0.85 };
+  return {
+    abs: false,
+    tractionControl: true,
+    autoShift: false,
+    steerLimit: 0.85,
+    stability: 0,
+    brakingAssist: 0,
+    forgivingGrass: false,
+    autoRecover: false,
+    steerAssist: 0,
+  };
+}
+
+export type DrivingLevel = 'bicio' | 'facile' | 'medio' | 'simulazione';
+
+/** Aiuti preimpostati per livello di guida. La fisica è la stessa: cambiano solo gli aiuti. */
+export function aidsForLevel(level: DrivingLevel): Aids {
+  switch (level) {
+    case 'bicio':
+      return { abs: true, tractionControl: true, autoShift: true, steerLimit: 1, stability: 1, brakingAssist: 1, forgivingGrass: true, autoRecover: true, steerAssist: 0.75 };
+    case 'facile':
+      return { abs: true, tractionControl: true, autoShift: true, steerLimit: 1, stability: 1, brakingAssist: 1, forgivingGrass: true, autoRecover: true, steerAssist: 0 };
+    case 'medio':
+      return { abs: true, tractionControl: true, autoShift: true, steerLimit: 0.9, stability: 0.5, brakingAssist: 0, forgivingGrass: true, autoRecover: true, steerAssist: 0 };
+    case 'simulazione':
+      return { abs: false, tractionControl: false, autoShift: false, steerLimit: 0, stability: 0, brakingAssist: 0, forgivingGrass: false, autoRecover: true, steerAssist: 0 };
+  }
 }
 
 /** Velocità di risposta dei comandi da tastiera (unità di comando al secondo). */

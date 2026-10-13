@@ -3,7 +3,7 @@ import { abs, approach, clamp, cos, hypot, lerp, lowPass, max, min, sin, TAU } f
 import type { CarParams, TireParams } from './params.ts';
 import { engineTorque, ersDeployLimit, RADS_TO_RPM, RPM_TO_RADS } from './powertrain.ts';
 import { computeTireForces, shapeB, type TireForces } from './tire.ts';
-import { SURFACES, Surface, type Track, type TrackQuery } from './track.ts';
+import { Surface, surfaceProps, type Track, type TrackQuery } from './track.ts';
 
 const G = 9.81;
 const AIR_DENSITY = 1.225;
@@ -290,7 +290,7 @@ export class Car {
       w.kappa = clamp((w.kappa + (dt * slipVel) / tp.relaxLong) / (1 + (dt * avx) / tp.relaxLong), -MAX_SLIP, MAX_SLIP);
       w.tanAlpha = clamp((w.tanAlpha - (dt * vyw) / tp.relaxLat) / (1 + (dt * avx) / tp.relaxLat), -MAX_SLIP, MAX_SLIP);
 
-      computeTireForces(tp, i < 2 ? this.bFront : this.bRear, w.fz, w.kappa, w.tanAlpha, SURFACES[w.surface].mu, this.forces);
+      computeTireForces(tp, i < 2 ? this.bFront : this.bRear, w.fz, w.kappa, w.tanAlpha, surfaceProps(w.surface, aids.forgivingGrass).mu, this.forces);
       w.fx = this.forces.fx;
       w.fy = this.forces.fy;
       w.combinedSlip = this.forces.combinedSlip;
@@ -376,7 +376,7 @@ export class Car {
       const inertia = tp.inertia + (i >= 2 ? engInertiaPerRear : 0);
       w.omega += (dt * (this.driveTq[i] - w.fx * tp.radius)) / inertia;
       // Freno e resistenza al rotolamento portano la ruota verso zero senza mai invertirla
-      const resist = this.brakeTq[i] + (tp.rollingRes + SURFACES[w.surface].extraRolling) * w.fz * tp.radius;
+      const resist = this.brakeTq[i] + (tp.rollingRes + surfaceProps(w.surface, aids.forgivingGrass).extraRolling) * w.fz * tp.radius;
       const dOmega = (resist * dt) / inertia;
       if (w.omega > dOmega) w.omega -= dOmega;
       else if (w.omega < -dOmega) w.omega += dOmega;
@@ -400,7 +400,7 @@ export class Car {
     }
     // Resistenza aggiuntiva delle superfici fuori pista (erba, ghiaia)
     let extra = 0;
-    for (let i = 0; i < 4; i++) extra += SURFACES[W[i].surface].extraRolling * W[i].fz * 0.5;
+    for (let i = 0; i < 4; i++) extra += surfaceProps(W[i].surface, aids.forgivingGrass).extraRolling * W[i].fz * 0.5;
     if (this.u > 0.1) fxb -= extra;
     else if (this.u < -0.1) fxb += extra;
 

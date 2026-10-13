@@ -1,4 +1,5 @@
 export * from './ai.ts';
+export * from './assists.ts';
 export * from './car.ts';
 export * from './controls.ts';
 export * from './laps.ts';

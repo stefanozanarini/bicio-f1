@@ -1,9 +1,11 @@
-import { DEFAULT_TRACK_ID, defaultAids, defaultKeyboardTuning, type Aids, type Difficulty, type KeyboardTuning } from '@bicio/sim-core';
+import { aidsForLevel, DEFAULT_TRACK_ID, defaultKeyboardTuning, type Aids, type Difficulty, type DrivingLevel, type KeyboardTuning } from '@bicio/sim-core';
 import { DEFAULT_GAMEPAD, type GamepadTuning } from './input/InputManager.ts';
 import { DEFAULT_TILT, type TiltTuning } from './input/tilt.ts';
 import type { CameraMode, QualityPreset } from './render/Renderer.ts';
 
 export interface Settings {
+  /** Livello di guida: aiuti preimpostati, oppure personalizzati */
+  drivingLevel: DrivingLevel | 'personalizzato';
   aids: Aids;
   keyboard: KeyboardTuning;
   gamepad: GamepadTuning;
@@ -44,14 +46,12 @@ export function touchActive(s: Settings): boolean {
 
 const KEY = 'bicio-f1.settings.v1';
 /** Versione delle preferenze: quando cambia, alcuni valori tornano al nuovo predefinito */
-const PREFS_VERSION = 2;
+const PREFS_VERSION = 3;
 
 export function defaultSettings(): Settings {
-  const aids = defaultAids();
-  // Sui dispositivi touch il cambio automatico evita due pulsanti in più
-  if (isTouchDevice()) aids.autoShift = true;
   return {
-    aids,
+    drivingLevel: 'facile',
+    aids: aidsForLevel('facile'),
     keyboard: defaultKeyboardTuning(),
     gamepad: { ...DEFAULT_GAMEPAD },
     quality: 'auto',
@@ -70,13 +70,17 @@ export function loadSettings(): Settings {
     const raw = localStorage.getItem(KEY);
     if (!raw) return d;
     const s = JSON.parse(raw) as Partial<Settings>;
+    // Dalla versione 3 c'è il livello di guida: chi aveva preferenze vecchie riparte da "Facile"
+    const v = (s as { v?: number }).v ?? 1;
+    const level = v >= 3 ? (s.drivingLevel ?? d.drivingLevel) : d.drivingLevel;
     return {
-      aids: { ...d.aids, ...s.aids },
+      drivingLevel: level,
+      aids: level === 'personalizzato' ? { ...d.aids, ...s.aids } : aidsForLevel(level),
       keyboard: { ...d.keyboard, ...s.keyboard },
       gamepad: { ...d.gamepad, ...s.gamepad },
       quality: s.quality ?? d.quality,
       camera: s.camera ?? d.camera,
-      trackId: (s as { v?: number }).v === PREFS_VERSION ? (s.trackId ?? d.trackId) : d.trackId,
+      trackId: v >= 2 ? (s.trackId ?? d.trackId) : d.trackId,
       touch: { ...d.touch, ...s.touch, tilt: { ...d.touch.tilt, ...s.touch?.tilt } },
       race: { ...d.race, ...s.race },
       playerName: s.playerName ?? d.playerName,

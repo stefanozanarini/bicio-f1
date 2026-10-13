@@ -20,6 +20,13 @@ export const SURFACES: Record<Surface, SurfaceProps> = {
   [Surface.Grass]: { mu: 0.5, extraRolling: 0.06 },
 };
 
+/** Erba con l'aiuto "erba indulgente": l'auto non si pianta e non si gira così facilmente. */
+export const FORGIVING_GRASS: SurfaceProps = { mu: 0.85, extraRolling: 0.012 };
+
+export function surfaceProps(s: Surface, forgiving: boolean): SurfaceProps {
+  return forgiving && s === Surface.Grass ? FORGIVING_GRASS : SURFACES[s];
+}
+
 export interface TrackDef {
   id: string;
   name: string;

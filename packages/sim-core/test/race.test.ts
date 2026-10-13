@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { lcg, randomSkill, RaceSession, TRACKS, type EntrantSpec } from '../src/index.ts';
+import { aidsForLevel, lcg, randomSkill, RaceSession, Surface, TRACKS, type EntrantSpec } from '../src/index.ts';
 
 function field(n: number, seed = 3): EntrantSpec[] {
   const r = lcg(seed);
@@ -44,5 +44,33 @@ describe('gara con piloti automatici', () => {
       return race.entrants.map((e) => [e.car.x, e.car.y, e.car.u]);
     };
     expect(run()).toEqual(run());
+  });
+});
+
+describe('aiuti alla guida', () => {
+  function onGrass(level: 'facile' | 'simulazione') {
+    const race = new RaceSession(TRACKS['lido-di-savio'], [{ id: 'me', kind: 'human' }], { laps: 0, seed: 1, aids: aidsForLevel(level) });
+    const me = race.entrants[0];
+    // Auto ferma sull'erba, 40 m fuori dalla pista
+    const p = race.track.poseAt(600);
+    me.car.place(p.x - Math.sin(p.heading) * 40, p.y + Math.cos(p.heading) * 40, p.heading);
+    race.advance(500 * 4);
+    return me;
+  }
+
+  it('rientro automatico: dall\'erba si torna in pista in qualche secondo', () => {
+    const me = onGrass('facile');
+    expect(me.recoveries).toBe(1);
+    expect(me.car.wheels.some((w) => w.surface !== Surface.Grass)).toBe(true);
+  });
+
+  it('senza rientro automatico l\'auto resta dov\'è', () => {
+    const race = new RaceSession(TRACKS['lido-di-savio'], [{ id: 'me', kind: 'human' }], { laps: 0, seed: 1, aids: { ...aidsForLevel('simulazione'), autoRecover: false } });
+    const me = race.entrants[0];
+    const p = race.track.poseAt(600);
+    me.car.place(p.x - Math.sin(p.heading) * 40, p.y + Math.cos(p.heading) * 40, p.heading);
+    race.advance(500 * 4);
+    expect(me.recoveries).toBe(0);
+    expect(me.car.wheels.every((w) => w.surface === Surface.Grass)).toBe(true);
   });
 });

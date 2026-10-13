@@ -10,7 +10,7 @@ import { DriversGallery } from './ui/DriversGallery.tsx';
 import { Garage } from './ui/Garage.tsx';
 import { Hud } from './ui/Hud.tsx';
 import { Results, StartLights, Tower } from './ui/RaceUi.tsx';
-import { SettingsPanel } from './ui/SettingsPanel.tsx';
+import { DrivingLevelSelect, SettingsPanel } from './ui/SettingsPanel.tsx';
 import { TelemetryPanel } from './ui/TelemetryPanel.tsx';
 import { TouchControls } from './ui/TouchControls.tsx';
 
@@ -148,6 +148,11 @@ export function App() {
                 placeholder="Tu"
                 onChange={(e) => updateSettings({ ...settings, playerName: e.target.value })}
               />
+            </label>
+
+            <label className="field">
+              <span>Livello di guida</span>
+              <DrivingLevelSelect settings={settings} onChange={updateSettings} />
             </label>
 
             <h2>Gioca da solo</h2>

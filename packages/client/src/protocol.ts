@@ -91,6 +91,8 @@ export interface Snapshot {
   aeroBlend: number;
   tcActive: boolean;
   overtakeMode: boolean;
+  /** Rientri automatici in pista del giocatore (contatore) */
+  recoveries: number;
   wheels: WheelSnapshot[];
   lap: LapState;
   cars: CarPose[];
