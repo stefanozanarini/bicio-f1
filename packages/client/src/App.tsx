@@ -4,11 +4,12 @@ import { GameClient, type PerfInfo } from './game/GameClient.ts';
 import type { Snapshot } from './protocol.ts';
 import { CAMERA_LABELS, QUALITY_LABELS } from './render/Renderer.ts';
 import { loadSettings, saveSettings, type Settings } from './settings.ts';
+import { DriversGallery } from './ui/DriversGallery.tsx';
 import { Hud } from './ui/Hud.tsx';
 import { SettingsPanel } from './ui/SettingsPanel.tsx';
 import { TelemetryPanel } from './ui/TelemetryPanel.tsx';
 
-type Screen = 'menu' | 'drive';
+type Screen = 'menu' | 'drive' | 'drivers';
 
 export function App() {
   const [screen, setScreen] = useState<Screen>('menu');
@@ -71,6 +72,8 @@ export function App() {
 
   const telemetrySource = useCallback(() => game.current?.telemetry ?? [], []);
 
+  if (screen === 'drivers') return <DriversGallery onBack={() => setScreen('menu')} />;
+
   if (screen === 'menu') {
     return (
       <div className="menu">
@@ -96,6 +99,9 @@ export function App() {
               }}
             >
               Scendi in pista
+            </button>
+            <button className="secondary-wide" onClick={() => setScreen('drivers')}>
+              Piloti (anteprima)
             </button>
           </div>
           <SettingsPanel settings={settings} onChange={updateSettings} gamepadName={gamepadName} />

@@ -530,3 +530,45 @@ kbd {
     display: none;
   }
 }
+
+/* ---------- Piloti ---------- */
+.menu-start button.secondary-wide {
+  margin-top: 10px;
+  font-size: 15px;
+  padding: 10px;
+}
+.gallery-actions {
+  max-width: 1100px;
+  margin: 0 auto 16px;
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+}
+.gallery {
+  max-width: 1100px;
+  margin: 0 auto;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 16px;
+}
+.driver-card {
+  margin: 0;
+  background: var(--panel);
+  border: 1px solid var(--panel-border);
+  border-radius: 14px;
+  padding: 10px;
+}
+.driver-card .portrait svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+.driver-card figcaption {
+  display: flex;
+  flex-direction: column;
+  padding: 8px 4px 2px;
+}
+.driver-card figcaption span {
+  color: var(--muted);
+  font-size: 13px;
+}
