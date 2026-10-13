@@ -1,5 +1,6 @@
 import { defaultAids, defaultKeyboardTuning, type Aids, type KeyboardTuning } from '@bicio/sim-core';
 import { DEFAULT_GAMEPAD, type GamepadTuning } from './input/InputManager.ts';
+import { DEFAULT_TILT, type TiltTuning } from './input/tilt.ts';
 import type { CameraMode, QualityPreset } from './render/Renderer.ts';
 
 export interface Settings {
@@ -9,18 +10,43 @@ export interface Settings {
   quality: QualityPreset | 'auto';
   camera: CameraMode;
   trackId: string;
+  touch: TouchSettings;
+}
+
+export interface TouchSettings {
+  /** Comandi sullo schermo: automatici sui dispositivi touch, sempre, mai */
+  mode: 'auto' | 'on' | 'off';
+  steering: 'arrows' | 'tilt';
+  tilt: TiltTuning;
+}
+
+/** Vero su smartphone e tablet (puntatore principale impreciso, cioè un dito). */
+export function isTouchDevice(): boolean {
+  try {
+    return window.matchMedia('(pointer: coarse)').matches;
+  } catch {
+    return false;
+  }
+}
+
+export function touchActive(s: Settings): boolean {
+  return s.touch.mode === 'on' || (s.touch.mode === 'auto' && isTouchDevice());
 }
 
 const KEY = 'bicio-f1.settings.v1';
 
 export function defaultSettings(): Settings {
+  const aids = defaultAids();
+  // Sui dispositivi touch il cambio automatico evita due pulsanti in più
+  if (isTouchDevice()) aids.autoShift = true;
   return {
-    aids: defaultAids(),
+    aids,
     keyboard: defaultKeyboardTuning(),
     gamepad: { ...DEFAULT_GAMEPAD },
     quality: 'auto',
     camera: 'chase',
     trackId: 'riviera',
+    touch: { mode: 'auto', steering: 'arrows', tilt: { ...DEFAULT_TILT } },
   };
 }
 
@@ -38,6 +64,7 @@ export function loadSettings(): Settings {
       quality: s.quality ?? d.quality,
       camera: s.camera ?? d.camera,
       trackId: s.trackId ?? d.trackId,
+      touch: { ...d.touch, ...s.touch, tilt: { ...d.touch.tilt, ...s.touch?.tilt } },
     };
   } catch {
     return d;

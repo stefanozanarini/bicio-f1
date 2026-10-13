@@ -1,4 +1,5 @@
-import type { Settings } from '../settings.ts';
+import { isTouchDevice, type Settings } from '../settings.ts';
+import { TiltSteering } from '../input/tilt.ts';
 import { ACTION_LABELS, DEFAULT_BINDINGS, type Action } from '../input/InputManager.ts';
 import { QUALITY_LABELS, type QualityPreset } from '../render/Renderer.ts';
 
@@ -88,6 +89,52 @@ export function SettingsPanel({ settings, onChange, gamepadName }: Props) {
         <Slider label="Curva sterzo" value={s.gamepad.steerGamma} min={1} max={3} step={0.1} onChange={(v) => gp({ steerGamma: v })} />
         <Slider label="Saturazione sterzo" value={s.gamepad.steerSaturation} min={0.5} max={1} step={0.01} format={pct} onChange={(v) => gp({ steerSaturation: v })} />
         <p className="hint">Grilletto destro: gas · sinistro: freno · RB/A: marcia su · LB/X: marcia giù · Y: visuale · B: telemetria · Back: rimetti in pista · Start: pausa</p>
+      </section>
+
+      <section>
+        <h3>Comandi touch</h3>
+        <label className="slider">
+          <span>Pulsanti sullo schermo</span>
+          <select value={s.touch.mode} onChange={(e) => onChange({ ...s, touch: { ...s.touch, mode: e.target.value as Settings['touch']['mode'] } })}>
+            <option value="auto">Automatici{isTouchDevice() ? ' (attivi)' : ''}</option>
+            <option value="on">Sempre</option>
+            <option value="off">Mai</option>
+          </select>
+        </label>
+        <label className="slider">
+          <span>Sterzo</span>
+          <select
+            value={s.touch.steering}
+            onChange={async (e) => {
+              const steering = e.target.value as Settings['touch']['steering'];
+              // Su iPhone il permesso per i sensori si chiede su un gesto dell'utente
+              if (steering === 'tilt' && !(await TiltSteering.requestPermission())) return;
+              onChange({ ...s, touch: { ...s.touch, steering } });
+            }}
+          >
+            <option value="arrows">Frecce</option>
+            <option value="tilt">Inclinazione del telefono</option>
+          </select>
+        </label>
+        {s.touch.steering === 'tilt' && (
+          <>
+            <Slider
+              label="Inclinazione per sterzo pieno"
+              value={s.touch.tilt.maxAngle}
+              min={10}
+              max={45}
+              step={1}
+              format={(v) => `${v}°`}
+              onChange={(v) => onChange({ ...s, touch: { ...s.touch, tilt: { ...s.touch.tilt, maxAngle: v } } })}
+            />
+            <Toggle
+              label="Inverti direzione"
+              value={s.touch.tilt.invert}
+              onChange={(v) => onChange({ ...s, touch: { ...s.touch, tilt: { ...s.touch.tilt, invert: v } } })}
+            />
+          </>
+        )}
+        <p className="hint">Con l'inclinazione tieni il telefono come un volante; il pulsante ⊕ ricentra lo sterzo. Il cambio automatico è consigliato.</p>
       </section>
 
       <section>

@@ -1,4 +1,5 @@
 import { emptyInput, type RawInput } from '@bicio/sim-core';
+import { TiltSteering } from './tilt.ts';
 
 export type Action =
   | 'throttle'
@@ -67,6 +68,11 @@ export class InputManager {
   onAction: (a: OneShot) => void = () => {};
 
   private readonly down = new Set<string>();
+  /** Tasti virtuali premuti sullo schermo touch */
+  private readonly virtual = new Set<Action>();
+  readonly tilt = new TiltSteering();
+  /** Sterzo a inclinazione al posto delle frecce */
+  tiltEnabled = false;
   /** Cambiate premute e rilasciate tra due invii: non vanno perse */
   private latchedUp = false;
   private latchedDown = false;
@@ -84,6 +90,7 @@ export class InputManager {
     window.removeEventListener('keydown', this.onKeyDown);
     window.removeEventListener('keyup', this.onKeyUp);
     window.removeEventListener('blur', this.onBlur);
+    this.tilt.stop();
   }
 
   rebuildMap(): void {
@@ -110,9 +117,24 @@ export class InputManager {
 
   private onBlur = () => {
     this.down.clear();
+    this.virtual.clear();
   };
 
+  /** Pulsanti sullo schermo touch: si comportano come i tasti della tastiera. */
+  setVirtual(action: Action, pressed: boolean): void {
+    if (pressed) {
+      if (this.virtual.has(action)) return;
+      this.virtual.add(action);
+      if (action === 'shiftUp') this.latchedUp = true;
+      if (action === 'shiftDown') this.latchedDown = true;
+      if (action === 'camera' || action === 'telemetry' || action === 'reset' || action === 'pause') this.onAction(action);
+    } else {
+      this.virtual.delete(action);
+    }
+  }
+
   private held(action: Action): boolean {
+    if (this.virtual.has(action)) return true;
     for (const c of this.bindings[action]) if (this.down.has(c)) return true;
     return false;
   }
@@ -129,6 +151,7 @@ export class InputManager {
     input.shiftDown = this.held('shiftDown') || this.latchedDown;
     this.latchedUp = false;
     this.latchedDown = false;
+    if (this.tiltEnabled && this.tilt.active && Math.abs(this.tilt.value) > 0.001) input.steerAxis = this.tilt.value;
     this.pollGamepad(input);
     return input;
   }

@@ -1,5 +1,6 @@
 import type { CarParams, Track } from '@bicio/sim-core';
 import * as THREE from 'three';
+import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 import type { Snapshot } from '../protocol.ts';
 import { buildCarModel, type CarModel } from './carModel.ts';
 import { buildTrackScene } from './trackMesh.ts';
@@ -111,6 +112,13 @@ export class Renderer {
       this.sun.shadow.bias = -0.0005;
     }
     this.scene.add(this.sun, this.sun.target);
+    // Riflessi sulla vernice (non sul preset più leggero)
+    if (quality !== 'low') {
+      const pmrem = new THREE.PMREMGenerator(this.renderer);
+      this.scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+      this.scene.environmentIntensity = 0.35;
+      pmrem.dispose();
+    }
 
     this.scene.add(buildTrackScene(track, { trees: q.trees, shadows: q.shadowMap > 0 }));
     this.car = buildCarModel(params);
@@ -160,6 +168,9 @@ export class Renderer {
       car.spins[i].rotation.z = -curr.wheels[i].spin;
     }
     car.steeringWheel.rotation.x = -curr.steer * 1.9;
+    car.setActiveAero(p.aeroBlend + (curr.aeroBlend - p.aeroBlend) * alpha);
+    // Luce posteriore lampeggiante quando l'ERS recupera, come sulle F1 vere
+    car.setRainLight(curr.ersHarvest > 0 && Math.floor(this.time * 6) % 2 === 0);
 
     // Sole e ombre seguono l'auto
     this.sun.position.set(x + 60, 120, -y + 40);

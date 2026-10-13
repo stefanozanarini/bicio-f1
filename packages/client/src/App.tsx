@@ -3,13 +3,30 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { GameClient, type PerfInfo } from './game/GameClient.ts';
 import type { Snapshot } from './protocol.ts';
 import { CAMERA_LABELS, QUALITY_LABELS } from './render/Renderer.ts';
-import { loadSettings, saveSettings, type Settings } from './settings.ts';
+import { TiltSteering } from './input/tilt.ts';
+import { loadSettings, saveSettings, touchActive, type Settings } from './settings.ts';
 import { DriversGallery } from './ui/DriversGallery.tsx';
+import { Garage } from './ui/Garage.tsx';
 import { Hud } from './ui/Hud.tsx';
 import { SettingsPanel } from './ui/SettingsPanel.tsx';
 import { TelemetryPanel } from './ui/TelemetryPanel.tsx';
+import { TouchControls } from './ui/TouchControls.tsx';
 
-type Screen = 'menu' | 'drive' | 'drivers';
+/** Schermo intero e orientamento orizzontale, dove il browser lo consente. */
+async function enterFullscreen(): Promise<void> {
+  try {
+    await document.documentElement.requestFullscreen?.({ navigationUI: 'hide' });
+  } catch {
+    // non supportato (es. iPhone): si gioca comunque
+  }
+  try {
+    await (screen.orientation as unknown as { lock?: (o: string) => Promise<void> }).lock?.('landscape');
+  } catch {
+    // non supportato
+  }
+}
+
+type Screen = 'menu' | 'drive' | 'drivers' | 'garage';
 
 export function App() {
   const [screen, setScreen] = useState<Screen>('menu');
@@ -70,9 +87,11 @@ export function App() {
     game.current?.setPaused(paused);
   }, [paused]);
 
+  const touch = touchActive(settings);
   const telemetrySource = useCallback(() => game.current?.telemetry ?? [], []);
 
   if (screen === 'drivers') return <DriversGallery onBack={() => setScreen('menu')} />;
+  if (screen === 'garage') return <Garage onBack={() => setScreen('menu')} />;
 
   if (screen === 'menu') {
     return (
@@ -99,7 +118,17 @@ export function App() {
             </p>
             <button
               className="primary"
-              onClick={() => {
+              onClick={async () => {
+                if (touchActive(settings)) {
+                  // Permesso dei sensori e schermo intero vanno chiesti subito, dentro il gesto dell'utente
+                  const perm = settings.touch.steering === 'tilt' ? TiltSteering.requestPermission() : Promise.resolve(true);
+                  const fs = enterFullscreen();
+                  const [granted] = await Promise.all([perm, fs]);
+                  if (!granted) {
+                    updateSettings({ ...settings, touch: { ...settings.touch, steering: 'arrows' } });
+                    flash('Sensori di movimento non autorizzati: uso le frecce');
+                  }
+                }
                 setPaused(false);
                 setScreen('drive');
               }}
@@ -109,6 +138,9 @@ export function App() {
             <button className="secondary-wide" onClick={() => setScreen('drivers')}>
               Piloti (anteprima)
             </button>
+            <button className="secondary-wide" onClick={() => setScreen('garage')}>
+              Garage (auto in 3D)
+            </button>
           </div>
           <SettingsPanel settings={settings} onChange={updateSettings} gamepadName={gamepadName} />
         </div>
@@ -117,9 +149,21 @@ export function App() {
   }
 
   return (
-    <div className="drive">
+    <div className={`drive ${touch ? 'touch' : ''}`}>
       <div ref={container} className="viewport" />
       {snap && <Hud snap={snap} />}
+      {touch && !paused && (
+        <TouchControls
+          press={(a, d) => game.current?.input.setVirtual(a, d)}
+          arrows={settings.touch.steering === 'arrows'}
+          shiftButtons={!settings.aids.autoShift}
+          onRecenter={() => {
+            game.current?.input.tilt.recenter();
+            flash('Sterzo ricentrato');
+          }}
+        />
+      )}
+      {touch && <div className="rotate-hint">Ruota il telefono in orizzontale 📱↻</div>}
       {showTelemetry && <TelemetryPanel source={telemetrySource} />}
       {perf && (
         <div className="perf">

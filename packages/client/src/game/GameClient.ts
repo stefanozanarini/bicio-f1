@@ -2,7 +2,7 @@ import { defaultCar2026, RIVIERA, Track, TRACKS, type TelemetrySample } from '@b
 import { InputManager } from '../input/InputManager.ts';
 import type { FromWorker, Snapshot, ToWorker } from '../protocol.ts';
 import { detectQuality, Renderer, type CameraMode, type QualityPreset } from '../render/Renderer.ts';
-import type { Settings } from '../settings.ts';
+import { touchActive, type Settings } from '../settings.ts';
 
 export interface GameCallbacks {
   onHud(snap: Snapshot): void;
@@ -31,7 +31,7 @@ const TELEMETRY_KEEP = 50 * 60;
 export class GameClient {
   readonly telemetry: TelemetrySample[] = [];
   private readonly worker: Worker;
-  private readonly input = new InputManager();
+  readonly input = new InputManager();
   private readonly track: Track;
   private renderer: Renderer;
   private settings: Settings;
@@ -59,6 +59,7 @@ export class GameClient {
     this.renderer = this.makeRenderer(settings.quality === 'auto' ? detectQuality() : settings.quality);
     this.renderer.cameraMode = settings.camera;
     this.input.gamepad = settings.gamepad;
+    this.applyTouch(settings);
     this.input.onAction = (a) => {
       if (a === 'camera') this.cb.onCamera(this.renderer.cycleCamera());
       else if (a === 'telemetry') this.cb.onToggleTelemetry();
@@ -158,9 +159,18 @@ export class GameClient {
     this.send({ type: 'pause', paused: p });
   }
 
+  private applyTouch(s: Settings): void {
+    const tilt = touchActive(s) && s.touch.steering === 'tilt';
+    this.input.tiltEnabled = tilt;
+    this.input.tilt.tuning = s.touch.tilt;
+    if (tilt) this.input.tilt.start();
+    else this.input.tilt.stop();
+  }
+
   applySettings(s: Settings): void {
     this.settings = s;
     this.input.gamepad = s.gamepad;
+    this.applyTouch(s);
     this.send({ type: 'settings', aids: s.aids, keyboard: s.keyboard });
   }
 
