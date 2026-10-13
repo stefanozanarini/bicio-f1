@@ -2,6 +2,7 @@ import fastifyStatic from '@fastify/static';
 import Fastify from 'fastify';
 import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { registerAccess } from './access.ts';
 
 /**
  * Server di bicio-F1.
@@ -14,6 +15,8 @@ const PUBLIC_DIR = resolve(process.env.PUBLIC_DIR ?? 'public');
 const VERSION = process.env.APP_VERSION ?? 'dev';
 
 const app = Fastify({ logger: { level: process.env.LOG_LEVEL ?? 'info' }, trustProxy: true });
+
+registerAccess(app);
 
 app.get('/api/health', async () => ({ ok: true, version: VERSION, uptime: Math.round(process.uptime()) }));
 

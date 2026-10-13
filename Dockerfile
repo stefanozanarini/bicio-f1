@@ -8,6 +8,8 @@ COPY packages/server/package.json packages/server/
 RUN npm ci
 COPY tsconfig.base.json ./
 COPY packages packages
+# Dati privati (nomi dei piloti): la cartella deve esistere, anche vuota
+COPY .private .private
 RUN npm run build && npm prune --omit=dev
 
 # ---- Runtime ----

@@ -24,4 +24,6 @@ jobs:
     needs: test
     steps:
       - uses: actions/checkout@v4
+      # In CI i dati privati non ci sono: cartella vuota, il gioco usa i nomi di riserva
+      - run: mkdir -p .private
       - run: docker build -t bicio-f1:ci .

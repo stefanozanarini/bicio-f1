@@ -65,7 +65,18 @@ git clone https://github.com/stefanozanarini/bicio-f1.git /opt/bicio-f1
 cd /opt/bicio-f1 && cp .env.example .env && nano .env
 ```
 
-Imposta una password lunga e casuale per `POSTGRES_PASSWORD` (puoi generarla con `openssl rand -base64 32`), poi:
+Nel file `.env` imposta:
+- `POSTGRES_PASSWORD`: una password lunga e casuale (`openssl rand -hex 24`);
+- `ACCESS_PASSWORD`: la password che i giocatori useranno per entrare;
+- `SESSION_SECRET`: una stringa casuale (`openssl rand -hex 32`).
+
+Copia sulla VPS anche la cartella privata `.private/` (nomi dei piloti), che non è su GitHub. Dal tuo PC:
+
+```bash
+scp -r .private UTENTE@IP_VPS:/opt/bicio-f1/
+```
+
+Senza questa cartella il gioco usa i nomi di riserva. Poi, sulla VPS:
 
 ```bash
 docker compose up -d --build
