@@ -1,0 +1,28 @@
+{
+  "name": "bicio-f1",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Simulatore di Formula 1 per il web, guida realistica",
+  "type": "module",
+  "workspaces": [
+    "packages/*"
+  ],
+  "engines": {
+    "node": ">=18.19"
+  },
+  "scripts": {
+    "dev": "npm run dev -w @bicio/client",
+    "dev:server": "npm run dev -w @bicio/server",
+    "build": "npm run build -w @bicio/client && npm run build -w @bicio/server",
+    "typecheck": "tsc -p packages/sim-core && tsc -p packages/client && tsc -p packages/server",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "metrics": "tsx packages/sim-core/scripts/metrics.ts"
+  },
+  "devDependencies": {
+    "@types/node": "^20.17.0",
+    "tsx": "^4.19.2",
+    "typescript": "~5.6.3",
+    "vitest": "^2.1.9"
+  }
+}

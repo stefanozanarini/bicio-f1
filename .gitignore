@@ -1,0 +1,12 @@
+node_modules/
+dist/
+*.tsbuildinfo
+.env
+.env.*
+!.env.example
+.DS_Store
+coverage/
+
+# Note private, mai pubblicate
+.private/
+CLAUDE.local.md

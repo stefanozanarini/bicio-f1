@@ -1,0 +1,51 @@
+# bicio-F1 in produzione.
+# Richiede il proxy condiviso (deploy/proxy) già avviato sulla VPS: crea la rete "proxy"
+# e gestisce HTTPS con certificati Let's Encrypt per tutti i progetti.
+name: bicio-f1
+
+services:
+  app:
+    build:
+      context: .
+      args:
+        APP_VERSION: ${APP_VERSION:-dev}
+    image: bicio-f1:latest
+    restart: unless-stopped
+    environment:
+      # Letti da nginx-proxy e acme-companion: dominio, porta interna e certificato
+      VIRTUAL_HOST: ${DOMAIN}
+      VIRTUAL_PORT: "3000"
+      LETSENCRYPT_HOST: ${DOMAIN}
+      DATABASE_URL: postgres://bicio:${POSTGRES_PASSWORD}@db:5432/bicio
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - proxy
+      - internal
+
+  db:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: bicio
+      POSTGRES_DB: bicio
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Imposta POSTGRES_PASSWORD nel file .env}
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U bicio -d bicio"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    # Nessuna porta esposta: il database è raggiungibile solo dalla rete interna
+    networks:
+      - internal
+
+volumes:
+  db-data:
+
+networks:
+  internal:
+  proxy:
+    external: true

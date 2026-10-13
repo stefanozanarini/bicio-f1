@@ -1,0 +1,54 @@
+# Reverse proxy condiviso da tutti i progetti sulla VPS.
+# nginx-proxy legge le variabili VIRTUAL_HOST/VIRTUAL_PORT dei container e genera la
+# configurazione di nginx; acme-companion ottiene e rinnova i certificati Let's Encrypt
+# per i container con LETSENCRYPT_HOST. WebSocket supportati senza configurazione.
+#
+# Avvio (una sola volta, da una cartella fuori dai progetti, es. /opt/proxy):
+#   docker network create proxy
+#   docker compose up -d
+name: proxy
+
+services:
+  nginx-proxy:
+    image: nginxproxy/nginx-proxy:1.6
+    container_name: nginx-proxy
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - /var/run/docker.sock:/tmp/docker.sock:ro
+      - certs:/etc/nginx/certs
+      - html:/usr/share/nginx/html
+      - ./conf.d/custom.conf:/etc/nginx/conf.d/custom.conf:ro
+    environment:
+      # Reindirizza sempre HTTP -> HTTPS e abilita HSTS sui siti con certificato
+      HTTPS_METHOD: redirect
+    networks:
+      - proxy
+
+  acme-companion:
+    image: nginxproxy/acme-companion:2.5
+    container_name: nginx-proxy-acme
+    restart: unless-stopped
+    depends_on:
+      - nginx-proxy
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - certs:/etc/nginx/certs
+      - html:/usr/share/nginx/html
+      - acme:/etc/acme.sh
+    environment:
+      NGINX_PROXY_CONTAINER: nginx-proxy
+      DEFAULT_EMAIL: ${ACME_EMAIL:?Imposta ACME_EMAIL nel file .env}
+    networks:
+      - proxy
+
+volumes:
+  certs:
+  html:
+  acme:
+
+networks:
+  proxy:
+    external: true

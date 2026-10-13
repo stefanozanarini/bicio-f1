@@ -1,0 +1,10 @@
+{
+  "name": "@bicio/sim-core",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Motore di simulazione deterministico di bicio-F1 (nessuna dipendenza da DOM o Node)",
+  "exports": {
+    ".": "./src/index.ts"
+  }
+}
