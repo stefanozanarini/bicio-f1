@@ -9,6 +9,7 @@ import {
   type RawInput,
 } from './controls.ts';
 import { atan } from './dmath.ts';
+import { LapTracker, type LapState } from './laps.ts';
 import { defaultCar2026, type CarParams } from './params.ts';
 import { Surface, Track, type TrackDef, type TrackQuery } from './track.ts';
 import { TelemetryRecorder, type TelemetrySample } from './telemetry.ts';
@@ -21,22 +22,6 @@ export const TELEMETRY_HZ = 50;
 const TELEMETRY_EVERY = PHYSICS_HZ / TELEMETRY_HZ;
 const RAD_TO_DEG = 180 / Math.PI;
 
-export interface LapState {
-  /** 0 = giro di lancio, poi 1, 2, ... */
-  lap: number;
-  /** Tempo del giro in corso [s] */
-  current: number;
-  currentValid: boolean;
-  last: number | null;
-  lastValid: boolean;
-  best: number | null;
-  /** Intertempi del giro in corso (fine settore 1, fine settore 2) */
-  splits: number[];
-  bestSplits: number[];
-  /** Distanza lungo la pista [m] */
-  distance: number;
-  trackLength: number;
-}
 
 export interface SimOptions {
   car?: CarParams;
@@ -61,31 +46,17 @@ export class Simulation {
   tick = 0;
 
   readonly lap: LapState;
-  private lapStartTime = 0;
-  private lastS = 0;
-  private centerHint = -1;
+  readonly timing: LapTracker;
   private readonly cq: TrackQuery = { index: 0, s: 0, lateral: 0, surface: Surface.Asphalt, offTrack: false };
   private readonly sample = {} as TelemetrySample;
-  private readonly sectorEnds: number[];
 
   constructor(trackDef: TrackDef, opts: SimOptions = {}) {
     this.track = new Track(trackDef);
     this.car = new Car(opts.car ?? defaultCar2026());
     this.aids = opts.aids ?? defaultAids();
     this.keyboard = opts.keyboard ?? defaultKeyboardTuning();
-    this.sectorEnds = [this.track.length / 3, (2 * this.track.length) / 3];
-    this.lap = {
-      lap: 0,
-      current: 0,
-      currentValid: false,
-      last: null,
-      lastValid: false,
-      best: null,
-      splits: [],
-      bestSplits: [],
-      distance: 0,
-      trackLength: this.track.length,
-    };
+    this.timing = new LapTracker(this.track);
+    this.lap = this.timing.state;
     this.placeAt(-(opts.startOffset ?? 120));
   }
 
@@ -98,15 +69,13 @@ export class Simulation {
     const pose = this.track.poseAt(s);
     this.car.place(pose.x, pose.y, pose.heading);
     this.filter.reset();
-    this.centerHint = pose.index;
-    this.track.query(pose.x, pose.y, this.centerHint, this.cq);
-    this.lastS = this.cq.s;
-    this.lap.currentValid = false;
+    this.timing.sync(this.car);
   }
+
 
   /** Riporta l'auto in pista nel punto più vicino. Invalida il giro in corso. */
   resetToTrack(): void {
-    this.track.query(this.car.x, this.car.y, this.centerHint, this.cq);
+    this.track.query(this.car.x, this.car.y, this.timing.trackIndex, this.cq);
     this.placeAt(this.cq.s);
   }
 
@@ -115,61 +84,13 @@ export class Simulation {
     const ctl = this.filter.update(this.input, this.keyboard, this.aids, car.params, car.speed, DT);
     car.step(ctl, this.aids, this.track, DT);
     this.tick++;
-    this.updateTiming();
+    this.timing.update(car, this.time, DT);
     if (this.tick % TELEMETRY_EVERY === 0) this.recordTelemetry();
   }
 
   /** Avanza di n passi. */
   advance(n: number): void {
     for (let i = 0; i < n; i++) this.step();
-  }
-
-  private updateTiming(): void {
-    const t = this.time;
-    const L = this.track.length;
-    const q = this.track.query(this.car.x, this.car.y, this.centerHint, this.cq);
-    this.centerHint = q.index;
-    const s = q.s;
-    const prev = this.lastS;
-    const lap = this.lap;
-
-    // Limiti della pista: tutte e quattro le ruote oltre la linea bianca
-    const w = this.car.wheels;
-    if (w[FL].offTrack && w[FR].offTrack && w[RL].offTrack && w[RR].offTrack) lap.currentValid = false;
-
-    if (prev > L - 100 && s < 100) {
-      // Traguardo in avanti: istante interpolato tra i due passi
-      const frac = (L - prev) / (L - prev + s);
-      const crossTime = t - DT + frac * DT;
-      if (lap.lap > 0) {
-        const lapTime = crossTime - this.lapStartTime;
-        lap.last = lapTime;
-        lap.lastValid = lap.currentValid;
-        if (lap.currentValid && (lap.best === null || lapTime < lap.best)) {
-          lap.best = lapTime;
-          lap.bestSplits = lap.splits.slice();
-        }
-      }
-      lap.lap++;
-      lap.splits = [];
-      lap.currentValid = true;
-      this.lapStartTime = crossTime;
-    } else if (prev < 100 && s > L - 100) {
-      // Traguardo all'indietro
-      lap.currentValid = false;
-    } else if (lap.lap > 0) {
-      for (let k = lap.splits.length; k < this.sectorEnds.length; k++) {
-        const e = this.sectorEnds[k];
-        if (prev < e && s >= e) {
-          const frac = (e - prev) / (s - prev);
-          lap.splits.push(t - DT + frac * DT - this.lapStartTime);
-        }
-        break;
-      }
-    }
-    lap.current = lap.lap > 0 ? t - this.lapStartTime : 0;
-    lap.distance = s;
-    this.lastS = s;
   }
 
   private recordTelemetry(): void {

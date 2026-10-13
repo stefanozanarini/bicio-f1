@@ -31,6 +31,8 @@ export interface TrackDef {
   kerbWidth: number;
   /** Curvatura oltre la quale si posano i cordoli [1/m] */
   kerbCurvature: number;
+  /** Ambientazione per la scenografia (solo grafica) */
+  theme?: 'campagna' | 'mare';
 }
 
 export interface TrackQuery {

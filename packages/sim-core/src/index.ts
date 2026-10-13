@@ -1,10 +1,15 @@
+export * from './ai.ts';
 export * from './car.ts';
 export * from './controls.ts';
+export * from './laps.ts';
 export * as dmath from './dmath.ts';
 export * from './params.ts';
+export * from './collisions.ts';
 export * from './powertrain.ts';
+export * from './race.ts';
+export * from './racingLine.ts';
 export * from './sim.ts';
 export * from './telemetry.ts';
 export * from './tire.ts';
 export * from './track.ts';
-export { RIVIERA, TEST_TRACK, TRACKS } from './tracks/index.ts';
+export { DEFAULT_TRACK_ID, LIDO_DI_SAVIO, RIVIERA, TEST_TRACK, TRACKS } from './tracks/index.ts';

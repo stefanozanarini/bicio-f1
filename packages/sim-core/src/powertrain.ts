@@ -29,9 +29,11 @@ export function engineTorque(p: EngineParams, rpm: number, throttle: number): nu
 }
 
 /** Potenza MGU-K disponibile alla velocità data (riduzione alle alte velocità). */
-export function ersDeployLimit(p: ErsParams, speed: number): number {
-  if (speed <= p.taperStartSpeed) return p.maxDeployPower;
-  if (speed >= p.taperEndSpeed) return 0;
-  const t = (speed - p.taperStartSpeed) / (p.taperEndSpeed - p.taperStartSpeed);
+export function ersDeployLimit(p: ErsParams, speed: number, override = false): number {
+  const start = override ? p.overrideTaperStart : p.taperStartSpeed;
+  const end = override ? p.overrideTaperEnd : p.taperEndSpeed;
+  if (speed <= start) return p.maxDeployPower;
+  if (speed >= end) return 0;
+  const t = (speed - start) / (end - start);
   return p.maxDeployPower * (1 - t);
 }

@@ -1,4 +1,4 @@
-import { defaultAids, defaultKeyboardTuning, type Aids, type KeyboardTuning } from '@bicio/sim-core';
+import { DEFAULT_TRACK_ID, defaultAids, defaultKeyboardTuning, type Aids, type Difficulty, type KeyboardTuning } from '@bicio/sim-core';
 import { DEFAULT_GAMEPAD, type GamepadTuning } from './input/InputManager.ts';
 import { DEFAULT_TILT, type TiltTuning } from './input/tilt.ts';
 import type { CameraMode, QualityPreset } from './render/Renderer.ts';
@@ -11,6 +11,15 @@ export interface Settings {
   camera: CameraMode;
   trackId: string;
   touch: TouchSettings;
+  race: RaceSettings;
+  playerName: string;
+}
+
+export interface RaceSettings {
+  laps: number;
+  opponents: number;
+  difficulty: Difficulty;
+  start: 'pole' | 'meta' | 'fondo' | 'casuale';
 }
 
 export interface TouchSettings {
@@ -34,6 +43,8 @@ export function touchActive(s: Settings): boolean {
 }
 
 const KEY = 'bicio-f1.settings.v1';
+/** Versione delle preferenze: quando cambia, alcuni valori tornano al nuovo predefinito */
+const PREFS_VERSION = 2;
 
 export function defaultSettings(): Settings {
   const aids = defaultAids();
@@ -45,7 +56,9 @@ export function defaultSettings(): Settings {
     gamepad: { ...DEFAULT_GAMEPAD },
     quality: 'auto',
     camera: 'chase',
-    trackId: 'riviera',
+    trackId: DEFAULT_TRACK_ID,
+    race: { laps: 5, opponents: 9, difficulty: 'medio', start: 'meta' },
+    playerName: '',
     touch: { mode: 'auto', steering: 'arrows', tilt: { ...DEFAULT_TILT } },
   };
 }
@@ -63,8 +76,10 @@ export function loadSettings(): Settings {
       gamepad: { ...d.gamepad, ...s.gamepad },
       quality: s.quality ?? d.quality,
       camera: s.camera ?? d.camera,
-      trackId: s.trackId ?? d.trackId,
+      trackId: (s as { v?: number }).v === PREFS_VERSION ? (s.trackId ?? d.trackId) : d.trackId,
       touch: { ...d.touch, ...s.touch, tilt: { ...d.touch.tilt, ...s.touch?.tilt } },
+      race: { ...d.race, ...s.race },
+      playerName: s.playerName ?? d.playerName,
     };
   } catch {
     return d;
@@ -73,7 +88,7 @@ export function loadSettings(): Settings {
 
 export function saveSettings(s: Settings): void {
   try {
-    localStorage.setItem(KEY, JSON.stringify(s));
+    localStorage.setItem(KEY, JSON.stringify({ ...s, v: PREFS_VERSION }));
   } catch {
     // archiviazione non disponibile (navigazione privata): le impostazioni valgono per la sessione
   }

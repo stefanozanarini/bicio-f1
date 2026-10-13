@@ -1,6 +1,6 @@
 import { Surface, type Track, type TrackQuery } from '@bicio/sim-core';
 import * as THREE from 'three';
-import { buildScenery } from './scenery.ts';
+import { buildScenery, buildSeaside } from './scenery.ts';
 import { asphaltTexture, checkerTexture, grassTexture, kerbTexture, labelTexture, seeded } from './textures.ts';
 
 /**
@@ -142,6 +142,7 @@ export function buildTrackScene(track: Track, opts: TrackSceneOptions): THREE.Gr
   addGrandstand(group, track);
   addTrees(group, track, opts.trees);
   group.add(buildScenery(track));
+  if (track.def.theme === 'mare') group.add(buildSeaside(track));
   return group;
 }
 
@@ -222,15 +223,29 @@ function addGrandstand(group: THREE.Group, track: Track): void {
 }
 
 /** Alberi sparsi lontano dalla pista: profondità e senso della velocità. */
+/** Limite est oltre il quale, sulle piste al mare, iniziano spiaggia e acqua. */
+export function seaLimit(track: Track): number {
+  let maxX = -Infinity;
+  for (let i = 0; i < track.count; i++) maxX = Math.max(maxX, track.px[i]);
+  return maxX + track.halfWidth + 35;
+}
+
+/**
+ * Alberi sparsi lontano dalla pista: profondità e senso della velocità.
+ * In campagna conifere, al mare pini marittimi con la chioma a ombrello.
+ */
 function addTrees(group: THREE.Group, track: Track, count: number): void {
   if (count <= 0) return;
   const r = seeded(99);
-  const trunkGeo = new THREE.CylinderGeometry(0.25, 0.35, 3, 6);
-  const crownGeo = new THREE.ConeGeometry(2.6, 7, 7);
-  const trunks = new THREE.InstancedMesh(trunkGeo, new THREE.MeshLambertMaterial({ color: 0x5b4330 }), count);
-  const crowns = new THREE.InstancedMesh(crownGeo, new THREE.MeshLambertMaterial({ color: 0x2f5a2a }), count);
+  const pines = track.def.theme === 'mare';
+  const trunkGeo = pines ? new THREE.CylinderGeometry(0.22, 0.32, 8, 6) : new THREE.CylinderGeometry(0.25, 0.35, 3, 6);
+  const crownGeo = pines ? new THREE.SphereGeometry(4, 9, 6) : new THREE.ConeGeometry(2.6, 7, 7);
+  if (pines) crownGeo.scale(1.15, 0.38, 1.15);
+  const trunks = new THREE.InstancedMesh(trunkGeo, new THREE.MeshLambertMaterial({ color: pines ? 0x6b4a33 : 0x5b4330 }), count);
+  const crowns = new THREE.InstancedMesh(crownGeo, new THREE.MeshLambertMaterial({ color: pines ? 0x2e5226 : 0x2f5a2a }), count);
   const m = new THREE.Matrix4();
   const q: TrackQuery = { index: -1, s: 0, lateral: 0, surface: Surface.Grass, offTrack: false };
+  const sea = pines ? seaLimit(track) - 15 : Infinity;
   let placed = 0;
   let guard = 0;
   while (placed < count && guard++ < count * 20) {
@@ -239,13 +254,16 @@ function addTrees(group: THREE.Group, track: Track, count: number): void {
     const off = side * (track.halfWidth + 25 + r() * 220);
     const x = track.px[i] - track.ty[i] * off;
     const y = track.py[i] + track.tx[i] * off;
+    if (x > sea) continue;
     // Lontano da qualunque tratto della pista
     track.query(x, y, -1, q);
     if (Math.abs(q.lateral) < track.halfWidth + 22) continue;
     const sc = 0.7 + r() * 0.8;
-    m.makeScale(sc, sc, sc).setPosition(x, 1.5 * sc, -y);
+    const trunkH = pines ? 8 : 3;
+    const crownY = pines ? 8.6 : 6;
+    m.makeScale(sc, sc, sc).setPosition(x, (trunkH / 2) * sc, -y);
     trunks.setMatrixAt(placed, m);
-    m.makeScale(sc, sc, sc).setPosition(x, 6 * sc, -y);
+    m.makeScale(sc, sc, sc).setPosition(x, crownY * sc, -y);
     crowns.setMatrixAt(placed, m);
     placed++;
   }

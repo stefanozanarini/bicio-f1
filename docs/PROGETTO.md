@@ -230,7 +230,7 @@ Tutti i comandi si possono riassegnare e vengono salvati nel profilo utente.
 | 0 ✅ | Monorepo, toolchain, CI, Docker | — |
 | 1 ✅ | sim-core base (telaio, 4 gomme Pacejka, PU semplice, freni), pista di test piatta, input tastiera e gamepad, vista 3D essenziale, telemetria | Guidare una F1 su una pista di prova |
 | 2 | Modello termico e usura delle gomme, mappa aero, sospensioni complete, ERS, pista vera con altimetria e cordoli, HUD, audio | Time trial realistico |
-| 3 | IA avversari, regole di gara (partenza, bandiere, penalità, pit stop), danni, collisioni | Gara completa |
+| 3 🟡 | IA avversari ✅, partenza con semaforo ✅, collisioni ✅, scia/aria sporca ✅, modalità sorpasso ✅; da fare: bandiere, penalità, pit stop, danni | Gara completa |
 | 4 | Backend + DB: account, profili, giri record validati, salvataggi | Classifiche online |
 | 5 | Manageriale: weekend completo, setup, campionato, scuderia, sviluppo, simulazione statistica delle gare non guidate | Modalità carriera |
 | 6 | Meteo dinamico, safety car, replay con telecamere TV, più piste | Esperienza completa |

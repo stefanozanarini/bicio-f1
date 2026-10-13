@@ -104,6 +104,14 @@ export class Car {
   tcFactor = 1;
   downforce = 0;
   drag = 0;
+  /**
+   * Effetti della scia di un'auto davanti, impostati dalla sessione a ogni passo:
+   * meno resistenza (scia) e meno carico (aria sporca).
+   */
+  wakeDrag = 1;
+  wakeDownforce = 1;
+  /** Modalità sorpasso attiva: entro un secondo dall'auto davanti (impostata dalla sessione) */
+  overtakeMode = false;
 
   private readonly wx: number[];
   private readonly wy: number[];
@@ -151,6 +159,29 @@ export class Car {
       w.absFactor = 1;
       w.trackHint = -1;
     }
+  }
+
+  /**
+   * Impulso applicato nel punto (px, py) del mondo [N s]: cambia velocità e imbardata.
+   * Usato per i contatti tra auto.
+   */
+  applyImpulse(px: number, py: number, jx: number, jy: number): void {
+    const m = this.params.chassis.mass;
+    const c = cos(this.heading);
+    const s = sin(this.heading);
+    this.u += (jx * c + jy * s) / m;
+    this.v += (-jx * s + jy * c) / m;
+    const rx = px - this.x;
+    const ry = py - this.y;
+    this.r += (rx * jy - ry * jx) / this.params.chassis.yawInertia;
+  }
+
+  /** Velocità nel mondo di un punto solidale all'auto. */
+  pointVelocity(px: number, py: number, out: { x: number; y: number }): void {
+    const c = cos(this.heading);
+    const s = sin(this.heading);
+    out.x = this.u * c - this.v * s - this.r * (py - this.y);
+    out.y = this.u * s + this.v * c + this.r * (px - this.x);
   }
 
   tireParams(i: number): TireParams {
@@ -209,8 +240,8 @@ export class Car {
     const clA = lerp(P.aero.clA, P.aero.clAStraight, this.aeroBlend);
     const cdA = lerp(P.aero.cdA, P.aero.cdAStraight, this.aeroBlend);
     const qd = 0.5 * AIR_DENSITY * this.u * this.u;
-    this.downforce = clA * qd;
-    this.drag = this.u >= 0 ? cdA * qd : -cdA * qd;
+    this.downforce = clA * qd * this.wakeDownforce;
+    this.drag = (this.u >= 0 ? cdA * qd : -cdA * qd) * this.wakeDrag;
 
     // --- Carichi verticali
     const mg = m * G;
@@ -298,7 +329,7 @@ export class Car {
     let tk = 0;
     this.ersDeployPower = 0;
     if (throttle > 0 && this.gear > 0 && this.ersStore > 0 && this.shiftTimer <= 0 && this.engineRpm < eng.limiterRpm) {
-      const pk = min(ersDeployLimit(P.ers, this.speed) * throttle, this.ersStore / dt);
+      const pk = min(ersDeployLimit(P.ers, this.speed, this.overtakeMode) * throttle, this.ersStore / dt);
       tk = pk / max(this.engineRpm * RPM_TO_RADS, 300);
       this.ersDeployPower = pk;
       this.ersStore -= pk * dt;

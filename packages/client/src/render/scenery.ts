@@ -1,6 +1,6 @@
 import { Surface, type Track, type TrackQuery } from '@bicio/sim-core';
 import * as THREE from 'three';
-import { LOCALITA, sponsors } from '../scenery/data.ts';
+import { pickLocalita, sponsors } from '../scenery/data.ts';
 import { fitText, panelTexture, seeded, stripesTexture } from './textures.ts';
 
 /**
@@ -88,12 +88,23 @@ function kiosk(r: Rng): THREE.Group {
   return g;
 }
 
+/** Texture condivise: lo stesso cartello o cartellone ripetuto non occupa altra memoria. */
+const texCache = new Map<string, THREE.Texture>();
+function cachedTexture(key: string, make: () => THREE.Texture): THREE.Texture {
+  let t = texCache.get(key);
+  if (!t) {
+    t = make();
+    texCache.set(key, t);
+  }
+  return t;
+}
+
 // ---------- Cartelli stradali ----------
 
 /** Cartello di località: bianco con bordo nero, come i cartelli d'inizio centro abitato. */
 function townSign(name: string): THREE.Group {
   const g = new THREE.Group();
-  const tex = panelTexture(512, 160, (ctx, w, h) => {
+  const tex = cachedTexture(`town:${name}`, () => panelTexture(512, 160, (ctx, w, h) => {
     ctx.fillStyle = '#ffffff';
     ctx.fillRect(0, 0, w, h);
     ctx.strokeStyle = '#111';
@@ -101,7 +112,7 @@ function townSign(name: string): THREE.Group {
     ctx.strokeRect(14, 14, w - 28, h - 28);
     ctx.fillStyle = '#111';
     fitText(ctx, name, w / 2, h / 2 + 4, w - 70, 78, 'bold');
-  });
+  }));
   const panel = new THREE.Mesh(new THREE.PlaneGeometry(3.2, 1.0), new THREE.MeshBasicMaterial({ map: tex }));
   panel.position.y = 2.2;
   g.add(panel);
@@ -113,7 +124,7 @@ function townSign(name: string): THREE.Group {
 /** Cartello di direzione blu con freccia e distanza. */
 function directionSign(name: string, km: number, left: boolean): THREE.Group {
   const g = new THREE.Group();
-  const tex = panelTexture(512, 128, (ctx, w, h) => {
+  const tex = cachedTexture(`dir:${name}:${km}:${left}`, () => panelTexture(512, 128, (ctx, w, h) => {
     ctx.fillStyle = '#1550a8';
     ctx.fillRect(0, 0, w, h);
     ctx.strokeStyle = '#fff';
@@ -133,7 +144,7 @@ function directionSign(name: string, km: number, left: boolean): THREE.Group {
     }
     ctx.fill();
     fitText(ctx, `${name}  ${km}`, w / 2, h / 2 + 3, w - 200, 56, 'bold');
-  });
+  }));
   const panel = new THREE.Mesh(new THREE.PlaneGeometry(3.6, 0.9), new THREE.MeshBasicMaterial({ map: tex }));
   panel.position.y = 2.4;
   g.add(panel);
@@ -153,10 +164,10 @@ const BILLBOARD_STYLES: { bg: string; fg: string; accent: string }[] = [
   { bg: '#1f7a3a', fg: '#ffffff', accent: '#ffe066' },
 ];
 
-function billboard(brand: string, slogan: string, r: Rng): THREE.Group {
+function billboard(brand: string, slogan: string, style: number): THREE.Group {
   const g = new THREE.Group();
-  const st = pick(r, BILLBOARD_STYLES);
-  const tex = panelTexture(1024, 340, (ctx, w, h) => {
+  const st = BILLBOARD_STYLES[style % BILLBOARD_STYLES.length];
+  const tex = cachedTexture(`bb:${brand}:${slogan}:${style}`, () => panelTexture(1024, 340, (ctx, w, h) => {
     ctx.fillStyle = st.bg;
     ctx.fillRect(0, 0, w, h);
     ctx.fillStyle = st.accent;
@@ -174,7 +185,7 @@ function billboard(brand: string, slogan: string, r: Rng): THREE.Group {
     fitText(ctx, brand, w / 2 - 40, h * 0.42, w - 200, 170, '900', 'Impact, Arial Black, sans-serif');
     ctx.fillStyle = st.bg;
     fitText(ctx, slogan.toUpperCase(), w / 2, h - 23, w - 60, 30, '800');
-  });
+  }));
   const panel = new THREE.Mesh(new THREE.PlaneGeometry(12, 4), new THREE.MeshBasicMaterial({ map: tex }));
   panel.position.y = 4.6;
   g.add(panel);
@@ -196,7 +207,7 @@ interface Placement {
  * Cerca un punto a distanza `offset` dal bordo, lontano da qualunque altro tratto
  * di pista e fuori dalla zona del traguardo (tribune e box).
  */
-function findSpot(track: Track, s: number, side: number, offset: number, faceTraffic: number): Placement | null {
+function findSpot(track: Track, s: number, side: number, offset: number, faceTraffic: number, maxX = Infinity): Placement | null {
   const L = track.length;
   const ss = ((s % L) + L) % L;
   if (ss < 450 || ss > L - 450) return null;
@@ -206,6 +217,8 @@ function findSpot(track: Track, s: number, side: number, offset: number, faceTra
   const off = side * (track.halfWidth + offset);
   const x = p.x + nx * off;
   const y = p.y + ny * off;
+  // Al mare niente cartelli sulla spiaggia
+  if (x > maxX) return null;
   const q: TrackQuery = { index: -1, s: 0, lateral: 0, surface: Surface.Grass, offTrack: true };
   track.query(x, y, -1, q);
   if (Math.abs(q.lateral) < track.halfWidth + offset - 2) return null;
@@ -228,6 +241,12 @@ export function buildScenery(track: Track, seed = 42): THREE.Group {
   const r = seeded(seed + track.length);
   const L = track.length;
   const sp = sponsors();
+  let maxX = Infinity;
+  if (track.def.theme === 'mare') {
+    maxX = -Infinity;
+    for (let i = 0; i < track.count; i++) maxX = Math.max(maxX, track.px[i]);
+    maxX += track.halfWidth + 30;
+  }
 
   const scatter = (count: number, make: (i: number) => THREE.Object3D, offset: [number, number], faceTraffic: number) => {
     for (let i = 0; i < count; i++) {
@@ -235,7 +254,7 @@ export function buildScenery(track: Track, seed = 42): THREE.Group {
       for (let attempt = 0; attempt < 12; attempt++) {
         const s = base + (r() - 0.5) * (L / count) * 0.6;
         const side = r() < 0.5 ? -1 : 1;
-        const p = findSpot(track, s, side, offset[0] + r() * (offset[1] - offset[0]), faceTraffic);
+        const p = findSpot(track, s, side, offset[0] + r() * (offset[1] - offset[0]), faceTraffic, maxX);
         if (!p) continue;
         const o = make(i);
         place(o, p);
@@ -245,10 +264,129 @@ export function buildScenery(track: Track, seed = 42): THREE.Group {
     }
   };
 
-  const towns = [...LOCALITA].sort(() => r() - 0.5);
   scatter(Math.max(4, Math.round(L / 850)), () => kiosk(r), [16, 30], 0.25);
-  scatter(Math.round(L / 450), (i) => billboard(sp.marchi[i % sp.marchi.length], pick(r, sp.slogan), r), [8, 14], 0.55);
-  scatter(Math.round(L / 600), (i) => townSign(towns[i % towns.length]), [5, 8], 0.9);
-  scatter(Math.round(L / 900), (i) => directionSign(towns[(i + 7) % towns.length], 3 + Math.floor(r() * 40), r() < 0.5), [6, 9], 0.9);
+  // Ogni marchio ha slogan e stile fissi: le texture si condividono tra i cartelloni
+  scatter(Math.round(L / 170), (i) => {
+    const k = i % sp.marchi.length;
+    return billboard(sp.marchi[k], sp.slogan[k % sp.slogan.length], k);
+  }, [8, 14], 0.55);
+  scatter(Math.round(L / 260), () => townSign(pickLocalita(r)[0]), [5, 8], 0.9);
+  scatter(Math.round(L / 420), () => {
+    const [name, km] = pickLocalita(r);
+    return directionSign(name, Math.max(1, km), r() < 0.5);
+  }, [6, 9], 0.9);
   return group;
+}
+
+// ---------- Mare: spiaggia, ombrelloni, bagni ----------
+
+const BAGNI = ['Bagno Mirella', 'Bagno Delfino', 'Bagno Romagna', 'Bagno Pineta', 'Bagno Tamerici', 'Bagno Conchiglia', 'Bagno Paradiso', 'Bagno Savio'];
+const UMBRELLA_COLORS = ['#e8432c', '#1f7ad1', '#f2c230', '#2aa36b', '#f07c1f', '#8b4fc7', '#e85a9b', '#18a3a3'];
+
+/**
+ * Lungomare di Lido di Savio: spiaggia con file di ombrelloni (un colore per ogni
+ * bagno), lettini, insegne dei bagni, torretta del bagnino e mare.
+ */
+export function buildSeaside(track: Track): THREE.Group {
+  const g = new THREE.Group();
+  const r = seeded(321);
+  let minY = Infinity;
+  let maxY = -Infinity;
+  let maxX = -Infinity;
+  for (let i = 0; i < track.count; i++) {
+    minY = Math.min(minY, track.py[i]);
+    maxY = Math.max(maxY, track.py[i]);
+    maxX = Math.max(maxX, track.px[i]);
+  }
+  const beachStart = maxX + track.halfWidth + 35;
+  const beachWidth = 110;
+  const y0 = minY - 600;
+  const y1 = maxY + 600;
+  const len = y1 - y0;
+
+  // Sabbia e mare (il mare si estende fino all'orizzonte)
+  const sand = new THREE.Mesh(new THREE.PlaneGeometry(beachWidth, len), lambert('#e7d5a8'));
+  sand.rotation.x = -Math.PI / 2;
+  sand.position.set(beachStart + beachWidth / 2, 0.005, -(y0 + len / 2));
+  g.add(sand);
+  const water = new THREE.Mesh(
+    new THREE.PlaneGeometry(5000, len + 4000),
+    new THREE.MeshStandardMaterial({ color: '#2f7fa6', roughness: 0.25, metalness: 0.1 }),
+  );
+  water.rotation.x = -Math.PI / 2;
+  water.position.set(beachStart + beachWidth + 2500, 0.01, -(y0 + len / 2));
+  g.add(water);
+  // Battigia più chiara
+  const surf = new THREE.Mesh(new THREE.PlaneGeometry(6, len), new THREE.MeshLambertMaterial({ color: '#cfe8ef', transparent: true, opacity: 0.7 }));
+  surf.rotation.x = -Math.PI / 2;
+  surf.position.set(beachStart + beachWidth + 1, 0.015, -(y0 + len / 2));
+  g.add(surf);
+
+  // Ombrelloni e lettini: un bagno ogni 70 m, ognuno con il suo colore
+  const rows = 5;
+  const perRow = 7;
+  const bagnoLen = 70;
+  const nBagni = Math.floor((maxY - minY + 400) / bagnoLen);
+  const total = nBagni * rows * perRow;
+  const poleGeo = new THREE.CylinderGeometry(0.04, 0.04, 2.4, 5);
+  const topGeo = new THREE.ConeGeometry(1.25, 0.55, 8, 1, true);
+  const bedGeo = new THREE.BoxGeometry(1.9, 0.25, 0.7);
+  const poles = new THREE.InstancedMesh(poleGeo, lambert('#dddddd'), total);
+  const tops = new THREE.InstancedMesh(topGeo, new THREE.MeshLambertMaterial({ side: THREE.DoubleSide }), total);
+  const beds = new THREE.InstancedMesh(bedGeo, lambert('#f4f1ea'), total);
+  const m = new THREE.Matrix4();
+  const col = new THREE.Color();
+  let k = 0;
+  for (let b = 0; b < nBagni; b++) {
+    const yStart = minY - 200 + b * bagnoLen;
+    const color = UMBRELLA_COLORS[b % UMBRELLA_COLORS.length];
+    for (let row = 0; row < rows; row++)
+      for (let j = 0; j < perRow; j++) {
+        const x = beachStart + 25 + row * 12;
+        const y = yStart + 6 + j * 9;
+        m.makeTranslation(x, 1.2, -y);
+        poles.setMatrixAt(k, m);
+        m.makeTranslation(x, 2.45, -y);
+        tops.setMatrixAt(k, m);
+        tops.setColorAt(k, col.set(color));
+        m.makeTranslation(x + 1.6, 0.2, -y);
+        beds.setMatrixAt(k, m);
+        k++;
+      }
+    // Insegna del bagno verso la pista
+    const name = BAGNI[b % BAGNI.length] + ` ${b + 10}`;
+    const sign = new THREE.Group();
+    const tex = cachedTexture(`bagno:${name}:${color}`, () =>
+      panelTexture(512, 160, (ctx, w, h) => {
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, w, h);
+        ctx.fillStyle = color;
+        ctx.fillRect(0, 0, w, 26);
+        ctx.fillRect(0, h - 26, w, 26);
+        ctx.fillStyle = '#1c2a3a';
+        fitText(ctx, name, w / 2, h / 2, w - 40, 64, '800', 'Georgia, serif');
+      }),
+    );
+    const panel = new THREE.Mesh(new THREE.PlaneGeometry(5, 1.6), new THREE.MeshBasicMaterial({ map: tex }));
+    panel.position.y = 3.2;
+    sign.add(panel);
+    for (const x of [-2.2, 2.2]) sign.add(box(0.12, 3.2, 0.12, lambert('#ffffff'), x, 1.6, -0.08));
+    sign.position.set(beachStart + 6, 0, -(yStart + 35));
+    sign.rotation.y = -Math.PI / 2;
+    g.add(sign);
+  }
+  poles.count = tops.count = beds.count = k;
+  if (tops.instanceColor) tops.instanceColor.needsUpdate = true;
+  g.add(poles, tops, beds);
+
+  // Torrette del bagnino
+  for (let y = minY; y < maxY; y += 400 + r() * 200) {
+    const tower = new THREE.Group();
+    for (const [dx, dz] of [[-0.8, -0.8], [0.8, -0.8], [-0.8, 0.8], [0.8, 0.8]]) tower.add(box(0.12, 3, 0.12, lambert('#ffffff'), dx, 1.5, dz));
+    tower.add(box(2, 0.15, 2, lambert('#d23b2c'), 0, 3, 0));
+    tower.add(box(1.9, 0.9, 0.08, lambert('#d23b2c'), 0, 3.5, 0.95));
+    tower.position.set(beachStart + beachWidth - 12, 0, -y);
+    g.add(tower);
+  }
+  return g;
 }

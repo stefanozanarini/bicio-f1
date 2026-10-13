@@ -37,10 +37,20 @@ export function Hud({ snap }: { snap: Snapshot }) {
     <div className="hud">
       <div className="hud-top">
         <div className="panel lap-panel">
-          <div className="row">
-            <span className="label">GIRO</span>
-            <span className="value">{lap.lap === 0 ? 'lancio' : lap.lap}</span>
-          </div>
+          {snap.race.laps > 0 ? (
+            <div className="race-pos">
+              <span className="big">P{snap.race.standings.find((r) => r.index === snap.race.focus)?.position ?? '-'}</span>
+              <span className="of">/{snap.race.standings.length}</span>
+              <span className="lapcount">
+                GIRO {Math.min(Math.max(lap.lap, 1), snap.race.laps)}/{snap.race.laps}
+              </span>
+            </div>
+          ) : (
+            <div className="row">
+              <span className="label">GIRO</span>
+              <span className="value">{lap.lap === 0 ? 'lancio' : lap.lap}</span>
+            </div>
+          )}
           <div className={`lap-current ${lap.currentValid ? '' : 'invalid'}`}>{lapTime(lap.lap > 0 ? lap.current : null)}</div>
           <div className="row">
             <span className="label">ULTIMO</span>
@@ -110,6 +120,7 @@ export function Hud({ snap }: { snap: Snapshot }) {
           <div className="flags">
             <span className={snap.aeroBlend > 0.5 ? 'on aero' : ''}>{snap.aeroBlend > 0.5 ? 'AERO RETTILINEO' : 'AERO CURVA'}</span>
             <span className={snap.tcActive ? 'on tc' : ''}>TC</span>
+            {snap.race.laps > 0 && <span className={snap.overtakeMode ? 'on override' : ''}>OVERRIDE</span>}
             <span className={snap.ersDeploy > 0 ? 'on deploy' : snap.ersHarvest > 0 ? 'on harvest' : ''}>
               {snap.ersDeploy > 0 ? 'ERS ▲' : snap.ersHarvest > 0 ? 'ERS ▼' : 'ERS'}
             </span>

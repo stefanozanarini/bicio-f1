@@ -7,7 +7,11 @@ Il progetto completo è descritto in [docs/PROGETTO.md](docs/PROGETTO.md). Per m
 ## Stato
 
 - **Fase 0** (impostazione del progetto) — completata
-- **Fase 1** (prototipo di guida) — completata: vettura 2026 su pista di prova, fisica a 500 Hz, tastiera e gamepad, 3D, telemetria
+- **Fase 1** (prototipo di guida) — completata: vettura 2026, fisica a 500 Hz, tastiera, gamepad e touch, 3D, telemetria
+- **Fase 3** (gara) — in gran parte completata: "Gioca da solo" contro piloti automatici con abilità diverse, partenza con semaforo, contatti tra auto, scia e aria sporca, modalità sorpasso 2026, classifica e podio
+- **Multiplayer "Gioca in balotta"** — prossimo passo
+
+Piste: Lido di Savio (predefinita), Autodromo della Riviera, Circuito di prova Bassa Pianura.
 
 ## Struttura
 
@@ -40,6 +44,8 @@ Altri comandi:
 |---|---|
 | `npm test` | Test di sim-core: determinismo, prestazioni "golden" della vettura, pista |
 | `npm run metrics` | Stampa le prestazioni della vettura (0-100, frenate, g laterali) |
+| `npx tsx packages/sim-core/scripts/race-sim.ts lido-di-savio 10 3` | Gara di prova tra piloti automatici, senza grafica |
+| `npx tsx packages/sim-core/scripts/track-check.ts` | Analisi delle piste (curve, raggi, sovrapposizioni) |
 | `npm run typecheck` | Controllo dei tipi su tutti i pacchetti |
 | `npm run build` | Compila client e server |
 | `npm run dev:server` | Avvia il server in sviluppo (porta 3000) |

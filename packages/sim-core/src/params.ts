@@ -59,6 +59,9 @@ export interface ErsParams {
   taperStartSpeed: number;
   /** Velocità a cui la potenza MGU-K arriva a zero [m/s] */
   taperEndSpeed: number;
+  /** Modalità sorpasso (regolamento 2026): piena potenza MGU-K fino a questa velocità [m/s] */
+  overrideTaperStart: number;
+  overrideTaperEnd: number;
   /** Rendimento del ciclo di recupero */
   harvestEfficiency: number;
 }
@@ -195,6 +198,8 @@ export function defaultCar2026(): CarParams {
       // Riduzione della potenza elettrica alle alte velocità: valori da tarare sul regolamento
       taperStartSpeed: 290 / 3.6,
       taperEndSpeed: 355 / 3.6,
+      overrideTaperStart: 337 / 3.6,
+      overrideTaperEnd: 370 / 3.6,
       harvestEfficiency: 0.9,
     },
     gearbox: {

@@ -1,6 +1,7 @@
 import { TRACKS } from '@bicio/sim-core';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { GameClient, type PerfInfo } from './game/GameClient.ts';
+import { buildSession, type SessionSetup } from './game/session.ts';
 import type { Snapshot } from './protocol.ts';
 import { CAMERA_LABELS, QUALITY_LABELS } from './render/Renderer.ts';
 import { TiltSteering } from './input/tilt.ts';
@@ -8,6 +9,7 @@ import { loadSettings, saveSettings, touchActive, type Settings } from './settin
 import { DriversGallery } from './ui/DriversGallery.tsx';
 import { Garage } from './ui/Garage.tsx';
 import { Hud } from './ui/Hud.tsx';
+import { Results, StartLights, Tower } from './ui/RaceUi.tsx';
 import { SettingsPanel } from './ui/SettingsPanel.tsx';
 import { TelemetryPanel } from './ui/TelemetryPanel.tsx';
 import { TouchControls } from './ui/TouchControls.tsx';
@@ -37,6 +39,8 @@ export function App() {
   const [perf, setPerf] = useState<PerfInfo | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [gamepadName, setGamepadName] = useState<string | null>(null);
+  const [setup, setSetup] = useState<SessionSetup | null>(null);
+  const [resultsDismissed, setResultsDismissed] = useState(false);
   const container = useRef<HTMLDivElement>(null);
   const game = useRef<GameClient | null>(null);
 
@@ -61,8 +65,10 @@ export function App() {
   }, []);
 
   useEffect(() => {
-    if (screen !== 'drive' || !container.current) return;
-    const g = new GameClient(container.current, settings, {
+    if (screen !== 'drive' || !container.current || !setup) return;
+    setSnap(null);
+    setResultsDismissed(false);
+    const g = new GameClient(container.current, settings, setup, {
       onHud: setSnap,
       onPauseRequest: () => setPaused((p) => !p),
       onHidden: () => setPaused(true),
@@ -79,9 +85,9 @@ export function App() {
       g.dispose();
       game.current = null;
     };
-    // La sessione si crea una volta per ingresso in pista
+    // Una sessione per ogni ingresso in pista (o rivincita)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [screen]);
+  }, [screen, setup]);
 
   useEffect(() => {
     game.current?.setPaused(paused);
@@ -93,6 +99,25 @@ export function App() {
   if (screen === 'drivers') return <DriversGallery onBack={() => setScreen('menu')} />;
   if (screen === 'garage') return <Garage onBack={() => setScreen('menu')} />;
 
+  /** Entra in pista: prepara la sessione dentro il gesto dell'utente (schermo intero, sensori). */
+  const start = async (mode: 'practice' | 'race') => {
+    if (touchActive(settings)) {
+      // Permesso dei sensori e schermo intero vanno chiesti subito, dentro il gesto dell'utente
+      const perm = settings.touch.steering === 'tilt' ? TiltSteering.requestPermission() : Promise.resolve(true);
+      const fs = enterFullscreen();
+      const [granted] = await Promise.all([perm, fs]);
+      if (!granted) {
+        updateSettings({ ...settings, touch: { ...settings.touch, steering: 'arrows' } });
+        flash('Sensori di movimento non autorizzati: uso le frecce');
+      }
+    }
+    setSetup(buildSession(loadSettings(), mode));
+    setPaused(false);
+    setScreen('drive');
+  };
+  const race = settings.race;
+  const setRace = (patch: Partial<Settings['race']>) => updateSettings({ ...settings, race: { ...race, ...patch } });
+
   if (screen === 'menu') {
     return (
       <div className="menu">
@@ -100,12 +125,12 @@ export function App() {
           <h1>
             bicio<span>-F1</span>
           </h1>
-          <p>Simulatore di Formula 1 · fase 1: prototipo di guida</p>
+          <p>Simulatore di Formula 1 · vettura 2026 · aero attiva · ERS 350 kW</p>
         </header>
         <div className="menu-body">
           <div className="menu-start">
-            <h2>Guida libera</h2>
-            <p>
+            <label className="field">
+              <span>Pista</span>
               <select className="track-select" value={settings.trackId} onChange={(e) => updateSettings({ ...settings, trackId: e.target.value })}>
                 {Object.values(TRACKS).map((t) => (
                   <option key={t.id} value={t.id}>
@@ -113,27 +138,70 @@ export function App() {
                   </option>
                 ))}
               </select>
-              <br />
-              <small>Vettura 2026 · aero attiva · ERS 350 kW</small>
-            </p>
-            <button
-              className="primary"
-              onClick={async () => {
-                if (touchActive(settings)) {
-                  // Permesso dei sensori e schermo intero vanno chiesti subito, dentro il gesto dell'utente
-                  const perm = settings.touch.steering === 'tilt' ? TiltSteering.requestPermission() : Promise.resolve(true);
-                  const fs = enterFullscreen();
-                  const [granted] = await Promise.all([perm, fs]);
-                  if (!granted) {
-                    updateSettings({ ...settings, touch: { ...settings.touch, steering: 'arrows' } });
-                    flash('Sensori di movimento non autorizzati: uso le frecce');
-                  }
-                }
-                setPaused(false);
-                setScreen('drive');
-              }}
-            >
-              Scendi in pista
+            </label>
+            <label className="field">
+              <span>Il tuo nome</span>
+              <input
+                className="track-select"
+                value={settings.playerName}
+                maxLength={24}
+                placeholder="Tu"
+                onChange={(e) => updateSettings({ ...settings, playerName: e.target.value })}
+              />
+            </label>
+
+            <h2>Gioca da solo</h2>
+            <div className="race-options">
+              <label>
+                Giri
+                <select value={race.laps} onChange={(e) => setRace({ laps: Number(e.target.value) })}>
+                  {[2, 3, 5, 10, 15, 20].map((n) => (
+                    <option key={n} value={n}>
+                      {n}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                Avversari
+                <select value={race.opponents} onChange={(e) => setRace({ opponents: Number(e.target.value) })}>
+                  {[1, 3, 5, 7, 9, 11, 15, 19].map((n) => (
+                    <option key={n} value={n}>
+                      {n}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                Livello
+                <select value={race.difficulty} onChange={(e) => setRace({ difficulty: e.target.value as Settings['race']['difficulty'] })}>
+                  <option value="facile">Facile</option>
+                  <option value="medio">Medio</option>
+                  <option value="difficile">Difficile</option>
+                </select>
+              </label>
+              <label>
+                Partenza
+                <select value={race.start} onChange={(e) => setRace({ start: e.target.value as Settings['race']['start'] })}>
+                  <option value="pole">In pole</option>
+                  <option value="meta">A metà griglia</option>
+                  <option value="fondo">In fondo</option>
+                  <option value="casuale">Casuale</option>
+                </select>
+              </label>
+            </div>
+            <button className="primary" onClick={() => start('race')}>
+              🏁 Corri la gara
+            </button>
+
+            <h2>Gioca in balotta</h2>
+            <button className="secondary-wide" disabled title="In arrivo: multiplayer con link d'invito">
+              👥 In arrivo: gara con gli amici
+            </button>
+
+            <h2>Altro</h2>
+            <button className="secondary-wide" onClick={() => start('practice')}>
+              Prove libere
             </button>
             <button className="secondary-wide" onClick={() => setScreen('drivers')}>
               Piloti (anteprima)
@@ -148,10 +216,16 @@ export function App() {
     );
   }
 
+  const inRace = setup?.config.mode === 'race' && snap !== null;
+  const meFinished = inRace && snap.race.standings.some((r) => r.index === snap.race.focus && r.finished);
+  const showResults = inRace && !resultsDismissed && (snap.race.phase === 'finished' || meFinished);
+
   return (
     <div className={`drive ${touch ? 'touch' : ''}`}>
       <div ref={container} className="viewport" />
       {snap && <Hud snap={snap} />}
+      {inRace && setup && <Tower race={snap.race} drivers={setup.drivers} />}
+      {inRace && <StartLights race={snap.race} />}
       {touch && !paused && (
         <TouchControls
           press={(a, d) => game.current?.input.setVirtual(a, d)}
@@ -172,6 +246,14 @@ export function App() {
       )}
       {notice && <div className="notice">{notice}</div>}
       {!snap && <div className="loading">Caricamento…</div>}
+      {showResults && setup && snap && (
+        <Results
+          race={snap.race}
+          drivers={setup.drivers}
+          onRematch={() => setSetup(buildSession(loadSettings(), 'race'))}
+          onMenu={() => setScreen('menu')}
+        />
+      )}
       {paused && (
         <div className="pause">
           <div className="pause-box">
@@ -183,10 +265,11 @@ export function App() {
               <button
                 onClick={() => {
                   game.current?.restart();
+                  setResultsDismissed(false);
                   setPaused(false);
                 }}
               >
-                Ricomincia la sessione
+                {setup?.config.mode === 'race' ? 'Ricomincia la gara' : 'Ricomincia la sessione'}
               </button>
               <button onClick={() => setScreen('menu')}>Torna al menu</button>
             </div>

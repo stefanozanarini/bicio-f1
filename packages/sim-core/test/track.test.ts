@@ -9,7 +9,7 @@ describe('piste', () => {
       const tr = new Track(def);
 
       it('geometria sensata: lunghezza e raggio minimo', () => {
-        expect(tr.length).toBeGreaterThan(4000);
+        expect(tr.length).toBeGreaterThan(3000);
         expect(tr.length).toBeLessThan(7000);
         let minR = Infinity;
         for (let i = 0; i < tr.count; i++) minR = Math.min(minR, 1 / Math.abs(tr.curvature[i]));

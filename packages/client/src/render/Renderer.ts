@@ -2,7 +2,7 @@ import type { CarParams, Track } from '@bicio/sim-core';
 import * as THREE from 'three';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 import type { Snapshot } from '../protocol.ts';
-import { buildCarModel, type CarModel } from './carModel.ts';
+import { buildCarModel, type CarModel, type Livery } from './carModel.ts';
 import { buildTrackScene } from './trackMesh.ts';
 
 export type CameraMode = 'chase' | 'tcam' | 'cockpit';
@@ -80,7 +80,9 @@ export class Renderer {
   private readonly lookOffset = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), -Math.PI / 2);
   private readonly resizeObs: ResizeObserver;
 
-  constructor(container: HTMLElement, track: Track, params: CarParams, quality: QualityPreset) {
+  private readonly cars: CarModel[] = [];
+
+  constructor(container: HTMLElement, track: Track, params: CarParams, quality: QualityPreset, liveries: Livery[], focus: number) {
     this.container = container;
     this.quality = quality;
     const q = spec(quality);
@@ -121,10 +123,14 @@ export class Renderer {
     }
 
     this.scene.add(buildTrackScene(track, { trees: q.trees, shadows: q.shadowMap > 0 }));
-    this.car = buildCarModel(params);
-    // Prima l'imbardata, poi beccheggio e rollio nel riferimento vettura
-    this.car.root.rotation.order = 'YXZ';
-    this.scene.add(this.car.root);
+    for (const livery of liveries) {
+      const m = buildCarModel(params, livery);
+      // Prima l'imbardata, poi beccheggio e rollio nel riferimento vettura
+      m.root.rotation.order = 'YXZ';
+      this.scene.add(m.root);
+      this.cars.push(m);
+    }
+    this.car = this.cars[focus] ?? this.cars[0];
 
     this.resizeObs = new ResizeObserver(() => this.resize());
     this.resizeObs.observe(container);
@@ -150,29 +156,46 @@ export class Renderer {
   render(prev: Snapshot | null, curr: Snapshot, alpha: number, dt: number): void {
     this.time += dt;
     const p = prev ?? curr;
-    const x = p.x + (curr.x - p.x) * alpha;
-    const y = p.y + (curr.y - p.y) * alpha;
-    let dh = curr.heading - p.heading;
-    dh -= Math.PI * 2 * Math.round(dh / (Math.PI * 2));
-    const heading = p.heading + dh * alpha;
-
-    // Vettura
-    const car = this.car;
-    car.root.position.set(x, 0, -y);
-    car.root.rotation.y = heading;
-    // Beccheggio e rollio visivi dalle accelerazioni (in fase 2 dalle sospensioni simulate)
-    car.root.rotation.z = THREE.MathUtils.clamp(curr.longG * 0.006, -0.03, 0.03);
-    car.root.rotation.x = THREE.MathUtils.clamp(curr.latG * 0.004, -0.025, 0.025);
-    for (let i = 0; i < 4; i++) {
-      car.pivots[i].rotation.y = curr.wheels[i].steer;
-      car.spins[i].rotation.z = -curr.wheels[i].spin;
+    const blink = Math.floor(this.time * 6) % 2 === 0;
+    let x = curr.x;
+    let y = curr.y;
+    let heading = curr.heading;
+    // Tutte le auto, interpolate tra gli ultimi due snapshot
+    for (let i = 0; i < this.cars.length; i++) {
+      const c = curr.cars[i];
+      const m = this.cars[i];
+      if (!c) {
+        m.root.visible = false;
+        continue;
+      }
+      const o = p.cars[i] ?? c;
+      const cx = o.x + (c.x - o.x) * alpha;
+      const cy = o.y + (c.y - o.y) * alpha;
+      let dh = c.heading - o.heading;
+      dh -= Math.PI * 2 * Math.round(dh / (Math.PI * 2));
+      const ch = o.heading + dh * alpha;
+      m.root.visible = true;
+      m.root.position.set(cx, 0, -cy);
+      m.root.rotation.y = ch;
+      // Beccheggio e rollio visivi dalle accelerazioni (in fase 2 dalle sospensioni simulate)
+      m.root.rotation.z = THREE.MathUtils.clamp(c.longG * 0.006, -0.03, 0.03);
+      m.root.rotation.x = THREE.MathUtils.clamp(c.latG * 0.004, -0.025, 0.025);
+      for (let w = 0; w < 4; w++) {
+        m.pivots[w].rotation.y = w < 2 ? c.steer : 0;
+        m.spins[w].rotation.z = -c.spin[w];
+      }
+      m.setActiveAero(o.aeroBlend + (c.aeroBlend - o.aeroBlend) * alpha);
+      // Luce posteriore lampeggiante quando l'ERS recupera, come sulle F1 vere
+      m.setRainLight(c.harvesting && blink);
+      if (m === this.car) {
+        x = cx;
+        y = cy;
+        heading = ch;
+      }
     }
-    car.steeringWheel.rotation.x = -curr.steer * 1.9;
-    car.setActiveAero(p.aeroBlend + (curr.aeroBlend - p.aeroBlend) * alpha);
-    // Luce posteriore lampeggiante quando l'ERS recupera, come sulle F1 vere
-    car.setRainLight(curr.ersHarvest > 0 && Math.floor(this.time * 6) % 2 === 0);
+    this.car.steeringWheel.rotation.x = -curr.steer * 1.9;
 
-    // Sole e ombre seguono l'auto
+    // Sole e ombre seguono l'auto del giocatore
     this.sun.position.set(x + 60, 120, -y + 40);
     this.sun.target.position.set(x, 0, -y);
 

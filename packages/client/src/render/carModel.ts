@@ -1,5 +1,6 @@
 import type { CarParams } from '@bicio/sim-core';
 import * as THREE from 'three';
+import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 
 /**
  * Modello 3D procedurale di una F1 2026.
@@ -182,6 +183,43 @@ function numberTexture(n: number, fg: string): THREE.CanvasTexture {
 }
 
 const hex = (n: number) => `#${n.toString(16).padStart(6, '0')}`;
+
+/**
+ * Unisce i figli diretti (mesh senza figli e senza texture) che condividono lo stesso
+ * materiale in un'unica mesh: da oltre cento oggetti per auto a poche decine.
+ * Con molte auto in pista è la differenza tra fluido e scattoso, soprattutto su telefono.
+ */
+function mergeStatic(group: THREE.Object3D): void {
+  const byMat = new Map<THREE.Material, THREE.Mesh[]>();
+  for (const c of group.children) {
+    if (!(c instanceof THREE.Mesh) || c.children.length > 0) continue;
+    const m = c.material as THREE.Material & { map?: THREE.Texture | null };
+    if (Array.isArray(c.material) || m.map || m.transparent) continue;
+    const list = byMat.get(m) ?? [];
+    list.push(c);
+    byMat.set(m, list);
+  }
+  for (const [mat, meshes] of byMat) {
+    if (meshes.length < 2) continue;
+    const geos = meshes.map((mesh) => {
+      mesh.updateMatrix();
+      let g = mesh.geometry.index ? mesh.geometry.toNonIndexed() : mesh.geometry.clone();
+      g.applyMatrix4(mesh.matrix);
+      const keep = new THREE.BufferGeometry();
+      keep.setAttribute('position', g.getAttribute('position'));
+      if (!g.getAttribute('normal')) g.computeVertexNormals();
+      keep.setAttribute('normal', g.getAttribute('normal'));
+      g = keep;
+      return g;
+    });
+    const merged = mergeGeometries(geos, false);
+    if (!merged) continue;
+    for (const mesh of meshes) group.remove(mesh);
+    const one = new THREE.Mesh(merged, mat);
+    one.castShadow = true;
+    group.add(one);
+  }
+}
 
 export function buildCarModel(params: CarParams, livery: Livery = { body: 0x1b2a6b, accent: 0xff7a00 }): CarModel {
   const root = new THREE.Group();
@@ -446,6 +484,10 @@ export function buildCarModel(params: CarParams, livery: Livery = { body: 0x1b2a
   const tcamEye = new THREE.Object3D();
   tcamEye.position.set(-0.15, 1.12, 0);
   root.add(tcamEye);
+
+  // Unione dei pezzi fissi: carrozzeria e telaio, poi ogni ruota
+  mergeStatic(root);
+  for (const sp of spins) mergeStatic(sp);
 
   return {
     root,
